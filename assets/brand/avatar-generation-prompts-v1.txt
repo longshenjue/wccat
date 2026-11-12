@@ -1,0 +1,21 @@
+Generation method: built-in image_gen
+
+Direction 1: red-blue mascot edit
+Use case: precise-object-edit / logo-brand.
+Create ONE polished square X profile avatar, a standalone finished image, not a comparison sheet or mockup.
+Input image 1 is the main edit target and cat identity reference. Input image 2 is a supporting reference for the same cute soft 3D mascot. Combine their character identity, while following these exact changes.
+Keep the recognizable round adorable kitten head, coral-red left half and sky-blue right half, large sparkling navy eyes with tiny heart/star catchlights, tabby marks, little triangular nose, smiling w-shaped mouth, curved whiskers, velvety smooth toy-like 3D shading, dark midnight-navy backdrop.
+Remove ALL headphones, earcups and headband completely. Remove ALL forehead writing and the circular forehead badge, leaving a clean natural cat forehead with only subtle tabby markings. Keep the cat as the central hero; no accessories or bow tie needed.
+Recompose slightly upward and scale the whole cat appropriately to make room for a separate clean brand wordmark immediately BELOW the cat's chin, never on the face. The exact single word is "WcCAT", spelled capital W, lowercase c, capitals C A T. Use a bold friendly rounded sans-serif with "Wc" coral-red and "CAT" sky-blue. Make the lettering large, legible and carefully kerned, with a restrained soft rim glow consistent with the cat, not a bulky sign.
+Composition: centered frontal head in the upper center, the complete wordmark centered underneath, clear separation between chin and letters, plenty of breathing room. Keep BOTH ears, whiskers and the entire wordmark inside the safe central circle so a circular X profile crop will not clip important content. The cat head should dominate and remain recognizable at small avatar size. Smooth professional rendering, refined edges, lovely balanced soft studio lighting.
+No extra text, no slogans, no watermark, no frame, no visible circular crop guide. Opaque dark background.
+
+Direction 2: blue-white mascot redesign
+Use case: logo-brand / stylized-concept.
+Create ONE original square X profile avatar for the existing brand WcCAT, a standalone finished mascot image. The two attached images are character/brand references ONLY; do a fresh redesign rather than repainting their red-blue split face.
+User direction: a cute cartoon kitten with a blue-and-white palette consistent with a blue-and-white WcCAT visual identity. Retain recognizable brand warmth and big expressive feline eyes, but create a distinct redesigned official mascot.
+Design a very cute rounded white kitten with soft sky-blue ear tips, azure inner ears, minimal blue tabby accents and a charming small blue forelock. White muzzle, plump cheeks with only a whisper of cool-blue blush, huge clear deep-navy eyes with crisp white and icy-blue catchlights, tiny blue nose and friendly cat smile. Use clean simplified shapes and a strong memorable silhouette readable at tiny profile size. Front-facing composition, gentle slightly playful expression. No headphones. No red, no pink, no purple.
+Style: premium cartoon mascot illustration with softly rounded 2.5D forms, delicate cel-like shading and very restrained toy-like volume; clean and friendly, polished contemporary brand mascot, not photorealistic, not overly furry, not visually cluttered.
+Integrate the existing exact brand name "WcCAT" as a separate bold rounded wordmark centered BELOW the kitten, never across its face or forehead. Spell capital W, lowercase c, capitals C A T. Wordmark in rich azure blue, recognizable friendly heavy rounded typography. It is the brand's own WcCAT identity, not another brand's logo. Give the cat and wordmark a coherent blue-white visual system.
+Background: elegant very pale ice-blue fading to white, with a subtle cool halo behind the white kitten to keep the ears and cheeks clearly separated. Plenty of clean negative space. All ears, whiskers and the entire wordmark remain inside a central circular avatar-safe composition, with generous margins for X circular cropping. Cat is the main focus and wordmark remains legible.
+No props, no scenery, no extra characters, no headphones, no forehead lettering, no slogans, no watermark, no border or visible crop guide. Opaque pale background.

@@ -1,0 +1,41 @@
+{
+  "name": "wccat",
+  "version": "1.0.0",
+  "description": "What Chinese Care About Today - a daily attention radar for the Chinese internet.",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "lint": "eslint .",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "sync": "tsx scripts/sync.ts",
+    "refresh": "tsx scripts/refresh.ts",
+    "analyze": "tsx scripts/analyze.ts",
+    "daily": "tsx scripts/daily.ts",
+    "ai:logs": "tsx scripts/ai-logs.ts",
+    "worker": "tsx scripts/hourly-refresh.ts",
+    "check:sources": "tsx scripts/check-sources.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "fast-xml-parser": "^5.8.0",
+    "html-to-image": "^1.11.13",
+    "next": "^16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.9.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.9",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}
