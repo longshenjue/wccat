@@ -14,7 +14,11 @@ async function runOnce() {
 }
 
 async function main() {
-  await runOnce();
+  try {
+    await runOnce();
+  } catch (error) {
+    console.error("[WcCAT] initial refresh failed; hourly retries remain scheduled", error);
+  }
   scheduleNextHour();
   scheduleDailyReport();
 }

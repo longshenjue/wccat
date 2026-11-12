@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseAllowedImageUrl } from "@/lib/image-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -35,33 +36,53 @@ export async function GET(request: Request) {
 
   let imageUrl: URL;
   try {
-    imageUrl = new URL(rawUrl);
+    imageUrl = parseAllowedImageUrl(rawUrl);
   } catch {
-    return NextResponse.json({ error: "Invalid image url" }, { status: 400 });
+    return NextResponse.json({ error: "Unapproved image url" }, { status: 400 });
   }
 
-  if (!["http:", "https:"].includes(imageUrl.protocol)) {
-    return NextResponse.json({ error: "Unsupported image url" }, { status: 400 });
-  }
-
-  const response = await fetch(imageUrl, {
-    headers: {
-      accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-      referer: referers[source] ?? imageUrl.origin,
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    },
-    next: { revalidate: 60 * 60 * 12 }
-  });
-
-  if (!response.ok || !response.body) {
-    return NextResponse.json({ error: "Image fetch failed" }, { status: response.status || 502 });
-  }
-
-  return new NextResponse(response.body, {
-    headers: {
-      "cache-control": "public, max-age=43200, stale-while-revalidate=86400",
-      "content-type": response.headers.get("content-type") ?? "image/jpeg"
+  try {
+    for (let redirects = 0; redirects <= 3; redirects += 1) {
+      const response = await fetch(imageUrl, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(10000),
+        cache: "no-store",
+        headers: {
+          accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+          referer: referers[source] ?? imageUrl.origin,
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        await response.body?.cancel();
+        if (!location) break;
+        try {
+          imageUrl = parseAllowedImageUrl(new URL(location, imageUrl).toString());
+        } catch {
+          return NextResponse.json({ error: "Unapproved image redirect" }, { status: 403 });
+        }
+        continue;
+      }
+      if (!response.ok || !response.body) {
+        await response.body?.cancel();
+        return NextResponse.json({ error: "Image fetch failed" }, { status: response.status || 502 });
+      }
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.toLowerCase().startsWith("image/")) {
+        await response.body.cancel();
+        return NextResponse.json({ error: "Upstream did not return an image" }, { status: 502 });
+      }
+      return new NextResponse(response.body, {
+        headers: {
+          "cache-control": "public, max-age=43200, stale-while-revalidate=86400",
+          "content-type": contentType,
+          "x-content-type-options": "nosniff"
+        }
+      });
     }
-  });
+    return NextResponse.json({ error: "Too many image redirects" }, { status: 502 });
+  } catch {
+    return NextResponse.json({ error: "Image fetch failed" }, { status: 502 });
+  }
 }

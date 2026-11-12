@@ -104,6 +104,9 @@ const adminTables: AdminTable[] = [
 ];
 
 export async function GET(request: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const url = new URL(request.url);
   const tableName = url.searchParams.get("table");
 
@@ -144,6 +147,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const body = (await request.json()) as { table?: string; values?: Record<string, unknown> };
   const table = getAdminTable(body.table);
   if (!table || !body.values || typeof body.values !== "object") {
@@ -168,6 +174,9 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const body = (await request.json()) as {
     table?: string;
     key?: Record<string, unknown>;
@@ -200,6 +209,9 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const body = (await request.json()) as { table?: string; key?: Record<string, unknown> };
   const table = getAdminTable(body.table);
   if (!table || !body.key) {

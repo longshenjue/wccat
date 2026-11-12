@@ -26,6 +26,14 @@ Set `DEEPSEEK_API_KEY` in `.env.local` to enable AI. All text generation uses
 
 Open `http://localhost:3002`. Both `npm run dev` and `npm run start` use port 3002.
 
+## Northflank Deployment
+
+Follow [the Northflank deployment guide](docs/deploy-northflank.md) for exact
+dashboard settings, private API networking, the SQLite volume, runtime secrets,
+health checks, and first-time report generation. The Docker image starts both
+the production web server and hourly worker through `npm run start:cloud`.
+Deploy one WcCAT instance and mount persistent storage at `/app/data`.
+
 ## Refresh Data
 
 ```bash

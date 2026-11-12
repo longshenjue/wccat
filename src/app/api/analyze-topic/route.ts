@@ -7,6 +7,9 @@ import type { TopicGroup } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   try {
     const body = (await request.json()) as TopicGroup | { date?: string; topic?: TopicGroup };
     const topic = isTopicRequest(body) ? body.topic : body;
