@@ -15,6 +15,7 @@
     "analyze": "tsx scripts/analyze.ts",
     "daily": "tsx scripts/daily.ts",
     "daily:translate": "tsx scripts/translate-daily.ts",
+    "admin:password": "tsx scripts/admin-password.ts",
     "ai:logs": "tsx scripts/ai-logs.ts",
     "worker": "tsx scripts/hourly-refresh.ts",
     "check:sources": "tsx scripts/check-sources.ts"
