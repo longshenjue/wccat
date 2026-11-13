@@ -44,7 +44,7 @@ function scheduleDailyReport() {
     try {
       const report = await generateDailyReport();
       console.log(
-        `[WcCAT] generated scheduled daily report ${report.reportDate}: ${report.topics.length} topics, window ${report.windowStart} -> ${report.windowEnd}.`
+        `[WcCAT] generated scheduled daily report ${report.reportDate}: ${report.topics.length} topics, window ${report.windowStart} -> ${report.windowEnd}, English share ${report.shareEnglish ? "ready" : "unavailable (retry: npm run daily:translate)"}.`
       );
     } catch (error) {
       console.error("[WcCAT] scheduled daily report failed", error);

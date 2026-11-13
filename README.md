@@ -85,8 +85,10 @@ Daily generation uses only snapshots actually collected in the preceding 24
 hours, fills in Top 1 analysis, and saves an English translation in the daily
 report. Downloads run in the browser and do not trigger collection or AI calls.
 If translation fails or the key is absent, Chinese remains available and English
-is disabled; rerun `npm run daily` after resolving the configuration or service
-issue. Older reports need regeneration to acquire English sharing content.
+is disabled; run `npm run daily:translate` after resolving the configuration or
+service issue. For older reports use `npm run daily:translate -- YYYY-MM-DD`.
+These commands only fill English copy, preserve the Chinese report and reuse an
+existing valid translation without another AI call.
 
 `npm run worker` refreshes immediately and then hourly; it generates the daily
 report at 00:10 Asia/Shanghai. Keep the worker running in a separate terminal.

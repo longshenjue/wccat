@@ -166,9 +166,9 @@ export function saveDailyReportToDb(report: WccatDailyReport) {
 }
 
 export function saveDailyShareEnglishToDb(report: WccatDailyReport) {
-  if (!report.shareEnglish) return;
+  if (!report.shareEnglish) return false;
   // An older translation must not replace a report published by a newer CLI/worker run.
-  getDb().prepare(`
+  const result = getDb().prepare(`
     update daily_reports
     set payload = json_set(payload, '$.shareEnglish', json(@translation))
     where report_date = @reportDate and generated_at = @generatedAt
@@ -177,6 +177,7 @@ export function saveDailyShareEnglishToDb(report: WccatDailyReport) {
     generatedAt: report.generatedAt,
     translation: JSON.stringify(report.shareEnglish)
   });
+  return result.changes === 1;
 }
 
 export function readDailyReportFromDb(reportDate: string) {

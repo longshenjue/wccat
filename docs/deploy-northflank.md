@@ -98,6 +98,17 @@ cd /app
 npm run daily
 ```
 
+若中文日报已生成但语言选项显示 `English · 暂不可用`，查看日志中 `English share translation unavailable` 的具体错误。可以只补生成英文，不重新抓取热点或重做中文日报：
+
+```bash
+cd /app
+npm run daily:translate
+# 或补指定日期：
+npm run daily:translate -- 2026-11-13
+```
+
+成功日志为 `English share ready`，然后刷新 `/daily` 或对应日期的归档页即可下载英文PNG。有效英文已存在时命令直接复用，不重复调用AI。失败时以非零状态退出；翻译期间中文日报有更新时会拒绝写入旧翻译，重新执行即可。该命令需要 Runtime 中配置 `DEEPSEEK_API_KEY`。
+
 其他维护命令：
 
 ```bash
