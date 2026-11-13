@@ -1,10 +1,10 @@
 import "./load-env";
 import { generateDailyReport } from "../src/lib/daily-report";
 import { refreshSnapshot } from "../src/lib/store";
-import { msUntilNextChinaTime, msUntilNextHour } from "../src/lib/date";
+import { msUntilNextChinaTime, msUntilNextRefresh } from "../src/lib/date";
 
-const dailyReportHour = 0;
-const dailyReportMinute = 10;
+const dailyReportHour = 2;
+const dailyReportMinute = 0;
 
 async function runOnce() {
   const snapshot = await refreshSnapshot();
@@ -17,29 +17,29 @@ async function main() {
   try {
     await runOnce();
   } catch (error) {
-    console.error("[WcCAT] initial refresh failed; hourly retries remain scheduled", error);
+    console.error("[WcCAT] initial refresh failed; 4-hour retries remain scheduled", error);
   }
-  scheduleNextHour();
+  scheduleNextRefresh();
   scheduleDailyReport();
 }
 
-function scheduleNextHour() {
-  const delay = msUntilNextHour();
-  console.log(`[WcCAT] next hourly refresh in ${Math.round(delay / 1000)}s`);
+function scheduleNextRefresh() {
+  const delay = msUntilNextRefresh();
+  console.log(`[WcCAT] next 4-hour refresh in ${Math.round(delay / 1000)}s`);
   setTimeout(async () => {
     try {
       await runOnce();
     } catch (error) {
-      console.error("[WcCAT] hourly refresh failed", error);
+      console.error("[WcCAT] 4-hour refresh failed", error);
     } finally {
-      scheduleNextHour();
+      scheduleNextRefresh();
     }
   }, delay);
 }
 
 function scheduleDailyReport() {
   const delay = msUntilNextChinaTime(dailyReportHour, dailyReportMinute);
-  console.log(`[WcCAT] next daily report at 00:10 China time in ${Math.round(delay / 1000)}s`);
+  console.log(`[WcCAT] next daily report at 02:00 China time in ${Math.round(delay / 1000)}s`);
   setTimeout(async () => {
     try {
       const report = await generateDailyReport();

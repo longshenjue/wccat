@@ -74,24 +74,31 @@ function numericalFacts(text: string) {
   const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
   const monthPattern = '(January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.?|Feb\\.?|Mar\\.?|Apr\\.?|Jun\\.?|Jul\\.?|Aug\\.?|Sep\\.?|Sept\\.?|Oct\\.?|Nov\\.?|Dec\\.?)';
   const monthNumber = (month: string) => months.indexOf(month.slice(0, 3).toLowerCase()) + 1;
+  const dayPattern = '(\\d{1,2})(?:st|nd|rd|th)?';
+  const yearSuffix = '(?:,\\s*|\\s+(?:(?:in|of)\\s+)?)(\\d{4})\\b';
+  const rangeSeparator = '\\s*(?:[-–—−]|to\\b|through\\b|and\\b)\\s*';
   const normalized = text
     .replace(/成千上万|成百上千|千千万万/g, '')
     .replace(/第([零〇一二两三四五六七八九十百千万亿]+)(?=[季届期集章回])/g,
-      (_, number: string) => `第${chineseInteger(number)}`)
-    // Only explicit magnitudes in quantity contexts: do not turn titles such as
-    // 人生一串 or idioms such as 千万不要 into extra numerical facts.
+      (_, number: string) => '第'+chineseInteger(number))
+    // Only explicit magnitudes; titles and idioms must not add numerical facts.
     .replace(/(?<![\d数几零〇一二两三四五六七八九十百千万亿])([零〇一二两三四五六七八九十百千万亿]*[十百千万亿][零〇一二两三四五六七八九十百千万亿]*)(?=(?:余|多)?(?:人|次|元|粉丝|用户|播放|热度|[，。；：！？、,.!?;:]|$))/g,
       (_, number: string) => String(chineseInteger(number)))
     .replace(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/g,
-      (_, year: string, month: string, day: string) => `${year}年${Number(month)}月${Number(day)}日`)
-    .replace(new RegExp(`\\b${monthPattern}\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})\\b`, 'gi'),
-      (_, month: string, day: string, year: string) => `${year}年${monthNumber(month)}月${day}日`)
-    .replace(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${monthPattern}\\s*,?\\s*(\\d{4})\\b`, 'gi'),
-      (_, day: string, month: string, year: string) => `${year}年${monthNumber(month)}月${day}日`)
-    .replace(new RegExp(`\\b${monthPattern}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, 'gi'),
-      (_, month: string, day: string) => `${monthNumber(month)}月${day}日`)
-    .replace(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+${monthPattern}\\b`, 'gi'),
-      (_, day: string, month: string) => `${monthNumber(month)}月${day}日`);
+      (_, year: string, month: string, day: string) => year+'年'+Number(month)+'月'+Number(day)+'日')
+    // Compact ranges must retain their trailing year before single dates are normalized.
+    .replace(new RegExp('\\b'+monthPattern+'\\s+'+dayPattern+rangeSeparator+dayPattern+yearSuffix, 'gi'),
+      (_, month: string, first: string, last: string, year: string) => year+'年'+monthNumber(month)+'月'+first+'日至'+last+'日')
+    .replace(new RegExp('\\b'+dayPattern+rangeSeparator+dayPattern+'\\s+'+monthPattern+yearSuffix, 'gi'),
+      (_, first: string, last: string, month: string, year: string) => year+'年'+monthNumber(month)+'月'+first+'日至'+last+'日')
+    .replace(new RegExp('\\b'+monthPattern+'\\s+'+dayPattern+yearSuffix, 'gi'),
+      (_, month: string, day: string, year: string) => year+'年'+monthNumber(month)+'月'+day+'日')
+    .replace(new RegExp('\\b'+dayPattern+'\\s+'+monthPattern+yearSuffix, 'gi'),
+      (_, day: string, month: string, year: string) => year+'年'+monthNumber(month)+'月'+day+'日')
+    .replace(new RegExp('\\b'+monthPattern+'\\s+'+dayPattern+'\\b', 'gi'),
+      (_, month: string, day: string) => monthNumber(month)+'月'+day+'日')
+    .replace(new RegExp('\\b'+dayPattern+'\\s+'+monthPattern+'\\b', 'gi'),
+      (_, day: string, month: string) => monthNumber(month)+'月'+day+'日');
   const scales: Record<string, number> = {'万亿': 1e12, '亿': 1e8, '万': 1e4, '千': 1e3, '百': 1e2, trillion: 1e12, billion: 1e9, million: 1e6, thousand: 1e3, hundred: 1e2, k: 1e3, m: 1e6, b: 1e9};
   const numbers = [...normalized.matchAll(/(\d+(?:[,，]\d{3})*(?:\.\d+)?)\s*(万亿|亿|万|千|百|trillion\b|billion\b|million\b|thousand\b|hundred\b|[kmb]\b)?/gi)]
     .map((match) => Number(match[1].replace(/[,，]/g, '')) * (scales[match[2]?.toLowerCase()] ?? 1))

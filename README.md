@@ -31,7 +31,7 @@ Open `http://localhost:3002`. Both `npm run dev` and `npm run start` use port 30
 Follow [the Northflank deployment guide](docs/deploy-northflank.md) for exact
 dashboard settings, private API networking, the SQLite volume, runtime secrets,
 health checks, and first-time report generation. The Docker image starts both
-the production web server and hourly worker through `npm run start:cloud`.
+the production web server and four-hour worker through `npm run start:cloud`.
 Deploy one WcCAT instance and mount persistent storage at `/app/data`.
 
 ## Refresh Data
@@ -40,7 +40,7 @@ Deploy one WcCAT instance and mount persistent storage at `/app/data`.
 npm run refresh
 ```
 
-Run the hourly worker in a separate process:
+Run the four-hour worker in a separate process:
 
 ```bash
 npm run worker
@@ -90,8 +90,14 @@ service issue. For older reports use `npm run daily:translate -- YYYY-MM-DD`.
 These commands only fill English copy, preserve the Chinese report and reuse an
 existing valid translation without another AI call.
 
-`npm run worker` refreshes immediately and then hourly; it generates the daily
-report at 00:10 Asia/Shanghai. Keep the worker running in a separate terminal.
+`npm run worker` refreshes immediately, then at 00:00/04:00/08:00/12:00/16:00/20:00
+Asia/Shanghai (six scheduled refreshes per day); it generates the daily
+report at 02:00 Asia/Shanghai, covering the preceding 02:00–02:00 window.
+Manual `npm run daily` also uses the latest completed 02:00 cutoff, not a rolling window.
+Daily topic persistence is shown as sample counts, not elapsed hours. Keep the worker running in a separate terminal.
+Restarts still trigger one immediate refresh; manual refresh/analyze commands
+remain explicit operations. English share output validation can request one
+corrective translation retry; authentication and network failures do not retry.
 
 Run `npm test` for daily-window and translation-validation regression checks.
 

@@ -120,3 +120,25 @@ test('accepts quantity thresholds, alternate day markers, and ratios',()=>{
   assert.deepEqual(validateShareTranslation(english,{headline,overview:'',topics:[]}),english);
  }
 });
+
+test('recognizes the year attached to compact multi-day English date ranges',()=>{
+ const source={...original,analysis:{...original.analysis!,detailedContent:'2027年报名人数为347万，考试定于2026年12月19日至20日举行，此前高峰400万，关注27考研。'}};
+ for(const dates of ['December 19–20, 2026','December 19-20,2026','December 19 to 20 in 2026','19–20 December 2026','19th through 20th December,2026']){
+  const english={...translated,analysis:{...translated.analysis!,detailedContent:`The 2027 exam attracted 3.47 million applicants, scheduled for ${dates}; the previous peak was 4 million, with attention on the 27 exam.`}};
+  assert.deepEqual(validateShareTranslation(english,source),english);
+ }
+});
+
+test('rejects moved or omitted range years despite an identical bag of numbers',()=>{
+ const source={headline:'2027年考研，考试定于2026年12月19日至20日举行。',overview:'',topics:[]};
+ for(const headline of ['The 2026 exam is on December 19–20, 2027.','In 2026 the 2027 exam is scheduled for December 19–20.']){
+  assert.throws(()=>validateShareTranslation({headline,overview:'',topics:[]},source));
+ }
+});
+
+test('accepts explicit single-date years with compact comma spacing',()=>{
+ const source={headline:'日期2026年12月19日',overview:'',topics:[]};
+ for(const headline of ['Date December 19,2026','Date 19 December,2026']){
+  assert.deepEqual(validateShareTranslation({headline,overview:'',topics:[]},source),{headline,overview:'',topics:[]});
+ }
+});

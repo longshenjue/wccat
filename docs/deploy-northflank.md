@@ -89,7 +89,7 @@ Advanced/Volumes中创建并挂载持久卷：
 
 ## 4. 初次数据与日报
 
-新卷为空时，应用会自动创建数据库；worker启动后立即刷新，之后每小时整点刷新，北京时间每天00:10生成日报和英文分享内容。
+新卷为空时，应用会自动创建数据库；worker启动后立即刷新，之后按北京时间00:00、04:00、08:00、12:00、16:00、20:00每4小时刷新一次（每天6次定时刷新），北京时间每天02:00生成日报和英文分享内容，统计前一天02:00至当天02:00内采集的热点快照。手动`npm run daily`也使用最近一个已结束的02:00统计窗口。重启仍会立即刷新一次；手动refresh/analyze命令不受定时频率限制。
 
 如需马上生成日报，等第一次抓取完成后进入 `wccat → Containers → Shell`：
 
@@ -128,7 +128,7 @@ npm run check:sources
 - `/daily`：日报和中英文PNG分享
 - `/api/health`：健康检查，应返回`{"ok":true}`
 
-检查Logs中的`starting web + worker`、`stored ... raw items ... topics`和`next hourly refresh`。重启一次WcCAT，确认历史快照仍存在，证明持久卷生效。
+检查Logs中的`starting web + worker`、`stored ... raw items ... topics`和`next 4-hour refresh`。重启一次WcCAT，确认历史快照仍存在，证明持久卷生效。
 
 生产环境中旧的任意表CRUD接口`/api/admin/db`、`/api/analyze-topic`返回404；公开刷新接口保持关闭。新的`/admin`只有配置管理员Runtime秘密后才启用，下载、预览和清理均验证管理员会话。按[管理员归档与清理说明](admin-data-archives.md)执行`npm run admin:password`生成`WCCAT_ADMIN_PASSWORD_HASH`与`WCCAT_ADMIN_SESSION_SECRET`，配置并重启后登录。首次尽早启用空间回收；保留日报并按需处理旧小时数据，不设置自动删除。图片代理仅允许已知平台CDN，并逐跳校验重定向目标。
 

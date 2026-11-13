@@ -38,6 +38,15 @@ export function msUntilNextHour(input = new Date()) {
   return Math.max(1000, next.getTime() - input.getTime());
 }
 
+/** Next 00/04/08/12/16/20 Beijing boundary, independent of the host timezone. */
+export function msUntilNextRefresh(input = new Date()) {
+  const timestamp = input.getTime();
+  if (!Number.isFinite(timestamp)) throw new Error("Invalid refresh schedule date");
+  const period = 4 * 60 * 60 * 1000;
+  const chinaOffset = 8 * 60 * 60 * 1000;
+  return (Math.floor((timestamp + chinaOffset) / period) + 1) * period - chinaOffset - timestamp;
+}
+
 export function msUntilNextChinaTime(hour: number, minute: number, input = new Date()) {
   const parts = getChinaDateParts(input);
   const target = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, hour - 8, minute, 0, 0));

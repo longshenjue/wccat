@@ -113,7 +113,7 @@ WcCAT 是 **What Chinese Care About Today** 的缩写，目标是做一个面向
 
 日报内容链路如下：
 
-1. `npm run daily` 手动触发，或 `npm run worker` 在中国时区 00:10 自动触发。
+1. `npm run daily` 手动触发，或 `npm run worker` 在中国时区 02:00 自动触发，统计前一天 02:00 至当天 02:00 的快照。
 2. `daily-report.ts` 读取截至当前小时的最近快照，并按真实采集时间过滤到最近 24 小时，避免停采断档时混入历史数据。
 3. 按归一化标题合并 24 小时内重复话题。
 4. 日榜分数综合最近热度、持续小时数、峰值排名和跨平台覆盖。
@@ -438,7 +438,7 @@ WCCAT_XIAOHONGSHU_API_KEY=...
 - 小时级快照模型。
 - 整点自动 worker。
 - 手动 `sync`、`analyze`、`check:sources` 命令。
-- 每日 00:10 自动生成 24 小时 Top10 日报，支持 `npm run daily` 手动触发。
+- 每日 02:00 自动生成前一天 02:00 至当天 02:00 的 24 小时 Top10 日报，支持 `npm run daily` 手动触发。
 - 多平台原始数据抓取和归一化。
 - 本机 DailyHotApi 聚合源集成。
 - 第一批/第二批 DailyHotApi 迁移：知乎、贴吧、36氪、IT之家、腾讯新闻、新浪新闻、网易新闻、虎嗅、少数派、虎扑、抖音已改为 WcCAT 直连优先；NGA 已移植直连实现但受当前本机网络解析影响暂不可用。

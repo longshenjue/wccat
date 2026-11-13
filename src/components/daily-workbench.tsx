@@ -142,7 +142,7 @@ function DailyTopicCard({
         <p>{topic.oneLine}</p>
         <div className="topic-meta daily-topic-meta">
           <span>{sentimentLabel(topic.sentiment)}</span>
-          <span>持续 {topic.activeHours} 小时</span>
+          <span>采样 {topic.sampleCount ?? topic.activeHours} 次</span>
           <span>峰值 #{topic.peakRank}</span>
           <span>{topic.sources.join(" / ")}</span>
         </div>
@@ -171,13 +171,13 @@ function DailyTopicInsight({ topic }: { topic: DailyReportTopic }) {
   const redScore =
     analysis?.battle.redScore ??
     Math.min(100, Math.max(18, Math.round((topic.peakHeatScore / Math.max(topic.dailyScore, 1)) * 100)));
-  const blueScore = analysis?.battle.blueScore ?? Math.min(100, Math.max(18, Math.round((topic.activeHours / 24) * 100)));
+  const blueScore = analysis?.battle.blueScore ?? Math.min(100, Math.max(18, Math.round((topic.sampleCoverage ?? topic.activeHours / 24) * 100)));
   const redLabel = analysis?.battle.redLabel ?? "峰值爆发力";
-  const blueLabel = analysis?.battle.blueLabel ?? "日内持续力";
+  const blueLabel = analysis?.battle.blueLabel ?? "采样覆盖率";
   const redRationale =
     analysis?.battle.redRationale ?? `红色侧代表这个话题在某个小时冲到高位的爆发强度，峰值排名 #${topic.peakRank}。`;
   const blueRationale =
-    analysis?.battle.blueRationale ?? `蓝色侧代表它在 24 小时内的持续存在感，共出现 ${topic.activeHours} 个小时。`;
+    analysis?.battle.blueRationale ?? `蓝色侧代表这个话题在统计窗口内的采样覆盖，共在 ${topic.sampleCount ?? topic.activeHours} 次采样中出现；采样次数不等于持续小时数。`;
 
   return (
     <section className="detail-card insight-card battle-card daily-insight-card">
@@ -300,7 +300,7 @@ function EmptyDailyInsight() {
       <div className="insight-frame" />
       <p className="eyebrow">Daily Signal</p>
       <h3>请选择一个日报话题</h3>
-      <p>点击中间 Top10 列表后，这里会展示该话题的 24 小时持续度、爆发力和来源链接。</p>
+      <p>点击中间 Top10 列表后，这里会展示该话题在统计窗口内的采样覆盖、爆发力和来源链接。</p>
     </section>
   );
 }

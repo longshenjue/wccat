@@ -1,4 +1,4 @@
-import { getChinaDate, getChinaSnapshotId } from "./date";
+import { getChinaSnapshotId } from "./date";
 import {
   readDailyReportFromDb,
   readLatestDailyReportFromDb,
@@ -10,7 +10,7 @@ import {
   writeGeneration
 } from "./db";
 import { normalizeTitle } from "./normalize";
-import { selectDailySnapshots } from "./daily-window";
+import { getDailyReportWindow, selectDailySnapshots } from "./daily-window";
 import { translateDailyShare } from "./daily-share-translation";
 import type { DailyShareCopy } from "./daily-share-copy";
 import { sentimentLabel } from "./sentiment";
@@ -25,7 +25,10 @@ export type DailyReportTopic = {
   dailyScore: number;
   peakRank: number;
   peakHeatScore: number;
+  /** Legacy field: observation count, not elapsed hours. Retained for archived reports. */
   activeHours: number;
+  sampleCount?: number;
+  sampleCoverage?: number;
   sources: string[];
   categories: string[];
   sentiment: Sentiment;
@@ -79,9 +82,9 @@ type GeneratedDrafts = Pick<WccatDailyReport, "headline" | "overview" | "wechatD
 
 export async function generateDailyReport(inputDate = new Date()) {
   const generation = writeGeneration();
-  const reportDate = getChinaDate(inputDate);
-  const beforeOrAt = getChinaSnapshotId(inputDate);
-  const snapshots = selectDailySnapshots(readRecentSnapshotsFromDb(24, beforeOrAt), inputDate);
+  const { start, end, reportDate } = getDailyReportWindow(inputDate);
+  // A 24-hour window can overlap 25 hour-keyed buckets at its two boundaries.
+  const snapshots = selectDailySnapshots(readRecentSnapshotsFromDb(25, getChinaSnapshotId(end)), end);
   const topics = buildDailyTopTopics(snapshots).slice(0, 10);
   const top = topics[0];
   if (top && (!top.aiAnalysis || top.aiAnalysis.model === "local-rules") && top.analysisSnapshotDate) {
@@ -91,12 +94,14 @@ export async function generateDailyReport(inputDate = new Date()) {
       top.aiAnalysis = await analyzeTopicWithDeepSeek(original, await fetchArticleContexts(original.occurrences));
     }
   }
-  const drafts = await generateDrafts(reportDate, snapshots, topics);
+  const drafts = await generateDrafts(reportDate, snapshots, topics, {
+    start: getChinaSnapshotId(start), end: getChinaSnapshotId(end)
+  });
   const report: WccatDailyReport = {
     reportDate,
     generatedAt: new Date().toISOString(),
-    windowStart: snapshots[0]?.date ?? beforeOrAt,
-    windowEnd: snapshots.at(-1)?.date ?? beforeOrAt,
+    windowStart: getChinaSnapshotId(start),
+    windowEnd: getChinaSnapshotId(end),
     topics,
     ...drafts
   };
@@ -115,8 +120,18 @@ export function getDailyReport(reportDate?: string) {
   return readLatestDailyReportFromDb();
 }
 
-function buildDailyTopTopics(snapshots: DailySnapshot[]) {
+export function buildDailyTopTopics(snapshots: DailySnapshot[]) {
   const buckets = new Map<string, TopicBucket>();
+  const snapshotDates = [...new Set(snapshots.map(snapshot => snapshot.date))].sort();
+  // Normalize persistence weighting for hourly legacy data and four-hour samples.
+  // This is a ranking weight, never an assertion of continuous elapsed activity.
+  const sampleTimes = snapshotDates.map(date => Date.parse(`${date.slice(0, 10)}T${date.slice(11)}:00:00+08:00`));
+  const gaps = sampleTimes.slice(1).map((time, index) => (time - sampleTimes[index]) / 3600000)
+    .filter(gap => Number.isFinite(gap) && gap > 0).sort((a, b) => a - b);
+  // Median cadence prevents one restart/manual sample from downweighting the entire day.
+  const middle = Math.floor(gaps.length / 2);
+  const medianGap = gaps.length % 2 ? gaps[middle] : (gaps[middle - 1] + gaps[middle]) / 2;
+  const sampleWeight = gaps.length ? Math.min(4, medianGap) : 1;
 
   for (const snapshot of snapshots) {
     for (const topic of snapshot.topics.slice(0, 30)) {
@@ -161,15 +176,15 @@ function buildDailyTopTopics(snapshots: DailySnapshot[]) {
   const analysisCache = new Map<string, ReturnType<typeof readTopicAnalysesForDate>>();
 
   return [...buckets.values()]
-    .map(toDailyReportTopic)
+    .map(bucket => toDailyReportTopic(bucket, snapshotDates.length, sampleWeight))
     .map((topic) => attachTopicAnalysis(topic, analysisCache))
     .sort((left, right) => right.dailyScore - left.dailyScore)
     .map((topic, index) => ({ ...topic, rank: index + 1 }));
 }
 
-function toDailyReportTopic(bucket: TopicBucket): DailyReportTopic {
+function toDailyReportTopic(bucket: TopicBucket, totalSamples: number, sampleWeight: number): DailyReportTopic {
   const sourceDiversity = Math.min(bucket.sources.size, 6) * 120;
-  const persistence = bucket.snapshotDates.size * 60;
+  const persistence = Math.min(24, bucket.snapshotDates.size * sampleWeight) * 60;
   const peakBonus = Math.max(0, 11 - bucket.peakRank) * 80;
   const dailyScore = Math.round(bucket.totalHeat / 12 + sourceDiversity + persistence + peakBonus);
   const uniqueLinks = uniqueOccurrences(bucket.occurrences).slice(0, 6);
@@ -184,10 +199,12 @@ function toDailyReportTopic(bucket: TopicBucket): DailyReportTopic {
     peakRank: Number.isFinite(bucket.peakRank) ? bucket.peakRank : 0,
     peakHeatScore: bucket.peakHeatScore,
     activeHours: bucket.snapshotDates.size,
+    sampleCount: bucket.snapshotDates.size,
+    sampleCoverage: bucket.snapshotDates.size / totalSamples,
     sources: [...bucket.sources],
     categories: [...bucket.categories],
     sentiment: bucket.sentiment,
-    signal: inferDailySignal(bucket),
+    signal: inferDailySignal(bucket, sampleWeight),
     oneLine: firstTopic?.summary.oneLine ?? `${bucket.title} 是过去 24 小时的高频中文互联网话题。`,
     whyItMatters:
       firstTopic?.summary.whyItMatters ??
@@ -233,7 +250,8 @@ function recencyMultiplier(snapshotDate: string, snapshots: DailySnapshot[]) {
 async function generateDrafts(
   reportDate: string,
   snapshots: DailySnapshot[],
-  topics: DailyReportTopic[]
+  topics: DailyReportTopic[],
+  window: { start: string; end: string }
 ): Promise<GeneratedDrafts> {
   const fallback = buildFallbackDrafts(reportDate, snapshots, topics);
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -266,15 +284,15 @@ async function generateDrafts(
               {
                 reportDate,
                 window: {
-                  start: snapshots[0]?.date,
-                  end: snapshots.at(-1)?.date,
+                  ...window,
                   snapshots: snapshots.length
                 },
                 topics: topics.map((topic) => ({
                   rank: topic.rank,
                   title: topic.title,
                   dailyScore: topic.dailyScore,
-                  activeHours: topic.activeHours,
+                  sampleCount: topic.sampleCount ?? topic.activeHours,
+                  sampleCoverage: topic.sampleCoverage,
                   peakRank: topic.peakRank,
                   sources: topic.sources,
                   sentiment: sentimentLabel(topic.sentiment),
@@ -330,6 +348,7 @@ function buildDailySystemPrompt() {
 - 这是面向外国人理解中文互联网的内容，但第一版用中文写。
 - 不要写成热搜搬运，要解释“今天中文互联网在关心什么”。
 - 没有证据的事实不要补充；可以使用“从榜单信号看”。
+- sampleCount 是采样出现次数，sampleCoverage 是采样覆盖率；采样次数不等于持续小时数，不推断未观测时段。
 - 公众号稿要适合截图/排版，视频稿要适合抖音和 B 站口播。`;
 }
 
@@ -342,12 +361,12 @@ function buildFallbackDrafts(
   const topicLines = topics
     .map(
       (topic) =>
-        `${topic.rank}. ${topic.title}：${topic.oneLine} 来源覆盖 ${topic.sources.join("、")}，持续 ${topic.activeHours} 小时。`
+        `${topic.rank}. ${topic.title}：${topic.oneLine} 来源覆盖 ${topic.sources.join("、")}，采样出现 ${topic.sampleCount ?? topic.activeHours} 次。`
     )
     .join("\n");
   const overview =
     topics.length > 0
-      ? `过去 24 小时，中文互联网的注意力集中在「${topics[0].title}」等话题。榜单综合了 ${snapshots.length} 个小时快照，优先考虑跨平台共振、持续时间和峰值排名。`
+      ? `本次 02:00 至次日 02:00 的 24 小时统计窗口内，中文互联网的注意力集中在「${topics[0].title}」等话题。榜单综合了 ${snapshots.length} 次采样快照，优先考虑跨平台共振、采样覆盖和峰值排名。`
       : "过去 24 小时的快照数量不足，暂时无法生成可靠日报。";
 
   return {
@@ -359,8 +378,8 @@ function buildFallbackDrafts(
   };
 }
 
-function inferDailySignal(bucket: TopicBucket): DailyReportTopic["signal"] {
-  if (bucket.snapshotDates.size >= 8 && bucket.peakRank <= 5) {
+function inferDailySignal(bucket: TopicBucket, sampleWeight: number): DailyReportTopic["signal"] {
+  if (bucket.snapshotDates.size * sampleWeight >= 8 && bucket.peakRank <= 5) {
     return "dominant";
   }
   if (bucket.topics.at(-1)?.signal === "rising" || bucket.topics.at(-1)?.signal === "new") {
