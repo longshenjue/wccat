@@ -66,7 +66,6 @@ export default async function Home({ searchParams }: PageProps) {
             <span className="brand-wc">Wc</span>
             <span className="brand-cat">CAT</span>
           </h1>
-          <p>每4小时更新</p>
         </div>
 
         <nav className="nav-card" aria-label="模式">
