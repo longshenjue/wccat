@@ -50,7 +50,7 @@ export async function refreshSnapshot(date = getChinaSnapshotId()) {
 
 export async function getSnapshot(date?: string) {
   if (date) {
-    return readSnapshotFromDb(date) ?? readLatestSnapshotFromDb() ?? emptySnapshot(date);
+    return readSnapshotFromDb(date) ?? emptySnapshot(date);
   }
 
   return readLatestSnapshotFromDb() ?? emptySnapshot(getChinaSnapshotId());

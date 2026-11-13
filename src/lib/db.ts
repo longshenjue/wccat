@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync, existsSync } from "node:fs";
 import {dataDir,dbPath} from "./storage-paths";
+import {archiveSources,archiveDatabase} from "./archive-catalog";
 import {createBusinessSchema} from "./db-schema";
 import {ensureMaintenanceSchema,guardedWrite,readGeneration} from "./maintenance";
 import type { WccatDailyReport } from "./daily-report";
@@ -105,49 +106,27 @@ export function saveSnapshotToDb(snapshot: DailySnapshot, expectedGeneration?: n
   }, expectedGeneration);
 }
 
-export function readSnapshotFromDb(date: string) {
-  const row = getDb()
-    .prepare("select payload from snapshots where date = ?")
-    .get(date) as { payload: string } | undefined;
+export function readSnapshotFromDb(date: string) { return readBestPayload("snapshots","date = ?",[date]) as DailySnapshot | null; }
 
-  return row ? (JSON.parse(row.payload) as DailySnapshot) : null;
-}
+export function readLatestSnapshotFromDb() { return readBestPayload("snapshots","1=1",[]) as DailySnapshot | null; }
 
-export function readLatestSnapshotFromDb() {
-  const row = getDb()
-    .prepare("select payload from snapshots order by date desc limit 1")
-    .get() as { payload: string } | undefined;
-
-  return row ? (JSON.parse(row.payload) as DailySnapshot) : null;
-}
-
-export function readPreviousSnapshotBeforeDateFromDb(date: string) {
-  const row = getDb()
-    .prepare("select payload from snapshots where date < ? order by date desc limit 1")
-    .get(date) as { payload: string } | undefined;
-
-  return row ? (JSON.parse(row.payload) as DailySnapshot) : null;
-}
+export function readPreviousSnapshotBeforeDateFromDb(date: string) { return readBestPayload("snapshots","date < ?",[date]) as DailySnapshot | null; }
 
 export function listSnapshotDatesFromDb() {
-  const rows = getDb()
-    .prepare("select date from snapshots order by date desc")
-    .all() as Array<{ date: string }>;
-
-  return rows.map((row) => row.date);
+ const dates=new Set<string>();for(const source of readSources())for(const row of source.prepare("select date from snapshots").iterate() as Iterable<{date:string}>)dates.add(row.date);
+ return [...dates].sort().reverse();
 }
 
-export function readRecentSnapshotsFromDb(limit = 24, beforeOrAt?: string) {
-  const database = getDb();
-  const rows = beforeOrAt
-    ? (database
-        .prepare("select payload from snapshots where date <= ? order by date desc limit ?")
-        .all(beforeOrAt, limit) as Array<{ payload: string }>)
-    : (database
-        .prepare("select payload from snapshots order by date desc limit ?")
-        .all(limit) as Array<{ payload: string }>);
-
-  return rows.map((row) => JSON.parse(row.payload) as DailySnapshot).reverse();
+export function readRecentSnapshotsFromDb(limit=24,beforeOrAt?:string):DailySnapshot[] {
+ const candidates=new Map<string,{key:string;generated_at:string;source:string}>();
+ for(const source of readSources()){
+  const rows=source.prepare("select date as key,generated_at from snapshots "+(beforeOrAt?"where date <= ? ":"")+"order by date desc limit ?").all(...(beforeOrAt?[beforeOrAt,limit]:[limit])) as {key:string;generated_at:string}[];
+  for(const row of rows){const old=candidates.get(row.key);if(!old||Date.parse(row.generated_at)>Date.parse(old.generated_at))candidates.set(row.key,{...row,source:source.name});}
+ }
+ return [...candidates.values()].sort((a,b)=>b.key.localeCompare(a.key)).slice(0,limit).reverse().map(row=>{
+  const source=row.source===dbPath?getDb():archiveDatabase(row.source);
+  return JSON.parse((source.prepare("select payload from snapshots where date=?").get(row.key) as {payload:string}).payload) as DailySnapshot;
+ });
 }
 
 export function saveDailyReportToDb(report: WccatDailyReport, expectedGeneration?: number) {
@@ -189,28 +168,13 @@ export function saveDailyShareEnglishToDb(report: WccatDailyReport, expectedGene
   }, expectedGeneration);
 }
 
-export function readDailyReportFromDb(reportDate: string) {
-  const row = getDb()
-    .prepare("select payload from daily_reports where report_date = ?")
-    .get(reportDate) as { payload: string } | undefined;
+export function readDailyReportFromDb(reportDate: string) { return readBestPayload("daily_reports","report_date = ?",[reportDate]) as WccatDailyReport | null; }
 
-  return row ? (JSON.parse(row.payload) as WccatDailyReport) : null;
-}
-
-export function readLatestDailyReportFromDb() {
-  const row = getDb()
-    .prepare("select payload from daily_reports order by report_date desc limit 1")
-    .get() as { payload: string } | undefined;
-
-  return row ? (JSON.parse(row.payload) as WccatDailyReport) : null;
-}
+export function readLatestDailyReportFromDb() { return readBestPayload("daily_reports","1=1",[]) as WccatDailyReport | null; }
 
 export function listDailyReportDatesFromDb() {
-  const rows = getDb()
-    .prepare("select report_date as reportDate from daily_reports order by report_date desc")
-    .all() as Array<{ reportDate: string }>;
-
-  return rows.map((row) => row.reportDate);
+ const dates=new Set<string>();for(const source of readSources())for(const row of source.prepare("select report_date from daily_reports").iterate() as Iterable<{report_date:string}>)dates.add(row.report_date);
+ return [...dates].sort().reverse();
 }
 
 export function saveTopicAnalysisToDb(
@@ -242,35 +206,20 @@ export function saveTopicAnalysisToDb(
 }
 
 export function readTopicAnalysesForDate(snapshotDate: string) {
-  const rows = getDb()
-    .prepare("select topic_id as topicId, payload from topic_analyses where snapshot_date = ?")
-    .all(snapshotDate) as Array<{ topicId: string; payload: string }>;
-
-  return Object.fromEntries(
-    rows.map((row) => [row.topicId, JSON.parse(row.payload) as TopicAnalysis])
-  );
+ const chosen=new Map<string,{payload:string;generated_at:string}>();
+ for(const source of readSources())for(const row of source.prepare("select topic_id,payload,generated_at from topic_analyses where snapshot_date=?").all(snapshotDate) as {topic_id:string;payload:string;generated_at:string}[]){
+  const old=chosen.get(row.topic_id);if(!old||Date.parse(row.generated_at)>Date.parse(old.generated_at))chosen.set(row.topic_id,row);
+ }
+ return Object.fromEntries([...chosen].map(([id,row])=>[id,JSON.parse(row.payload) as TopicAnalysis]));
 }
 
-export function readRecentTopicAnalysisBeforeDate(snapshotDate: string, topicId: string) {
-  const row = getDb()
-    .prepare(
-      `
-        select snapshot_date as snapshotDate, payload
-        from topic_analyses
-        where topic_id = ?
-          and snapshot_date < ?
-        order by snapshot_date desc
-        limit 1
-      `
-    )
-    .get(topicId, snapshotDate) as { snapshotDate: string; payload: string } | undefined;
-
-  return row
-    ? {
-        snapshotDate: row.snapshotDate,
-        analysis: JSON.parse(row.payload) as TopicAnalysis
-      }
-    : null;
+export function readRecentTopicAnalysisBeforeDate(snapshotDate:string,topicId:string) {
+ let chosen:{snapshotDate:string;payload:string}|undefined;
+ for(const source of readSources()){
+  const row=source.prepare("select snapshot_date as snapshotDate,payload from topic_analyses where topic_id=? and snapshot_date<? order by snapshot_date desc limit 1").get(topicId,snapshotDate) as typeof chosen;
+  if(row&&(!chosen||row.snapshotDate>chosen.snapshotDate))chosen=row;
+ }
+ return chosen?{snapshotDate:chosen.snapshotDate,analysis:JSON.parse(chosen.payload) as TopicAnalysis}:null;
 }
 
 export function saveAiAnalysisLogToDb(
@@ -311,3 +260,16 @@ export function saveAiAnalysisLogToDb(
 
 
 export function writeGeneration() { return readGeneration(getDb()); }
+
+function* readSources(){yield getDb();yield* archiveSources();}
+function readBestPayload(table:"snapshots"|"daily_reports",where:string,args:string[]):unknown {
+ const key=table==="snapshots"?"date":"report_date";
+ let chosen:{key:string;generated_at:string;source:string}|undefined;
+ for(const source of readSources()){
+  const row=source.prepare("select "+key+" as key,generated_at from "+table+" where "+where+" order by "+key+" desc limit 1").get(...args) as {key:string;generated_at:string}|undefined;
+  if(row&&(!chosen||row.key>chosen.key||(row.key===chosen.key&&Date.parse(row.generated_at)>Date.parse(chosen.generated_at))))chosen={...row,source:source.name};
+ }
+ if(!chosen)return null;
+ const source=chosen.source===dbPath?getDb():archiveDatabase(chosen.source);
+ return JSON.parse((source.prepare("select payload from "+table+" where "+key+"=?").get(chosen.key) as {payload:string}).payload);
+}
