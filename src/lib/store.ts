@@ -4,7 +4,8 @@ import {
   readLatestSnapshotFromDb,
   readPreviousSnapshotBeforeDateFromDb,
   readSnapshotFromDb,
-  saveSnapshotToDb
+  saveSnapshotToDb,
+  writeGeneration
 } from "./db";
 import { fetchAllSources } from "./ingest";
 import { precomputeTopicAnalyses } from "./precompute";
@@ -32,16 +33,17 @@ export async function createDailySnapshot(date = getChinaSnapshotId()): Promise<
   };
 }
 
-export async function saveSnapshot(snapshot: DailySnapshot) {
-  saveSnapshotToDb(snapshot);
+export async function saveSnapshot(snapshot: DailySnapshot, generation?: number) {
+  saveSnapshotToDb(snapshot, generation);
 }
 
 export async function refreshSnapshot(date = getChinaSnapshotId()) {
+  const generation = writeGeneration();
   const snapshot = await createDailySnapshot(date);
   if (snapshot.rawItems.length === 0) {
     return readSnapshotFromDb(date) ?? readLatestSnapshotFromDb() ?? snapshot;
   }
-  await saveSnapshot(snapshot);
+  await saveSnapshot(snapshot, generation);
   await precomputeTopicAnalyses(snapshot);
   return snapshot;
 }

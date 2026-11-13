@@ -2,15 +2,18 @@ import {
   readRecentTopicAnalysisBeforeDate,
   readTopicAnalysesForDate,
   saveAiAnalysisLogToDb,
-  saveTopicAnalysisToDb
+  saveTopicAnalysisToDb,
+  writeGeneration
 } from "./db";
 import { fetchArticleContexts } from "./fulltext";
 import { analyzeTopicWithDeepSeek, buildFallbackTopicAnalysis } from "./topic-analysis";
 import type { DailySnapshot } from "./types";
+import {MaintenanceError} from "./maintenance";
 
 const defaultLimit = 1;
 
 export async function precomputeTopicAnalyses(snapshot: DailySnapshot, top?: number) {
+  const generation = writeGeneration();
   const configuredLimit = Number(process.env.WCCAT_ANALYZE_TOPICS ?? defaultLimit);
   const limit = Number.isFinite(top) && top ? top : configuredLimit;
   const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : defaultLimit;
@@ -47,7 +50,7 @@ export async function precomputeTopicAnalyses(snapshot: DailySnapshot, top?: num
         console.log(`[WcCAT][AI] anchoring #${topic.rank} to ${previous.snapshotDate}`);
       }
       const analysis = await analyzeTopicWithDeepSeek(topic, articleContexts, previousAnalysis, (trace) => {
-        saveAiAnalysisLogToDb(snapshot.date, topic.id, trace);
+        saveAiAnalysisLogToDb(snapshot.date, topic.id, trace, generation);
         console.log(
           `[WcCAT][AI] #${topic.rank} ${trace.provider}/${trace.model} ${trace.status} ${trace.durationMs}ms fallback=${trace.usedFallback}`
         );
@@ -55,14 +58,15 @@ export async function precomputeTopicAnalyses(snapshot: DailySnapshot, top?: num
           console.warn(`[WcCAT][AI] #${topic.rank} ${trace.error}`);
         }
       });
-      saveTopicAnalysisToDb(snapshot.date, topic.id, analysis);
+      saveTopicAnalysisToDb(snapshot.date, topic.id, analysis, generation);
       if (analysis.model === "local-rules") {
         console.warn(`[WcCAT] AI analysis unavailable for #${topic.rank} ${topic.title}; saved local-rules fallback. Retry with npm run analyze -- top=${safeLimit}`);
       } else {
         console.log(`[WcCAT] analyzed #${topic.rank} ${topic.title} via ${analysis.model}`);
       }
     } catch (error) {
-      saveTopicAnalysisToDb(snapshot.date, topic.id, buildFallbackTopicAnalysis(topic));
+      if (error instanceof MaintenanceError) throw error;
+      saveTopicAnalysisToDb(snapshot.date, topic.id, buildFallbackTopicAnalysis(topic), generation);
       console.warn(`[WcCAT] analysis fallback for ${topic.title}`, error);
     }
   }

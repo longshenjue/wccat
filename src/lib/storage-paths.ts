@@ -1,0 +1,6 @@
+import path from 'node:path';
+export const dataDir=path.resolve(process.env.WCCAT_DATA_DIR??path.join(process.cwd(),'data'));
+export const dbPath=path.join(dataDir,'wccat.sqlite');
+export const exportsDir=path.join(dataDir,'admin-exports');
+export const archivesDir=path.join(dataDir,'archives');
+

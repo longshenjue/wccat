@@ -6,7 +6,8 @@ import {
   readSnapshotFromDb,
   readTopicAnalysesForDate,
   saveDailyReportToDb,
-  saveDailyShareEnglishToDb
+  saveDailyShareEnglishToDb,
+  writeGeneration
 } from "./db";
 import { normalizeTitle } from "./normalize";
 import { selectDailySnapshots } from "./daily-window";
@@ -77,6 +78,7 @@ type TopicBucket = {
 type GeneratedDrafts = Pick<WccatDailyReport, "headline" | "overview" | "wechatDraft" | "videoScript" | "model">;
 
 export async function generateDailyReport(inputDate = new Date()) {
+  const generation = writeGeneration();
   const reportDate = getChinaDate(inputDate);
   const beforeOrAt = getChinaSnapshotId(inputDate);
   const snapshots = selectDailySnapshots(readRecentSnapshotsFromDb(24, beforeOrAt), inputDate);
@@ -99,9 +101,9 @@ export async function generateDailyReport(inputDate = new Date()) {
     ...drafts
   };
 
-  saveDailyReportToDb(report);
+  saveDailyReportToDb(report, generation);
   report.shareEnglish = await translateDailyShare(report);
-  if (report.shareEnglish) saveDailyShareEnglishToDb(report);
+  if (report.shareEnglish) saveDailyShareEnglishToDb(report, generation);
   return report;
 }
 
