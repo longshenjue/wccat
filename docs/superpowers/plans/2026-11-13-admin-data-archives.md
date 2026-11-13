@@ -106,8 +106,12 @@
 
 **Files:** Update README, `.env.example`, `docs/deploy-northflank.md`, approved spec status and this plan's evidence.
 
-- [ ] Run all tests, `npx tsc --noEmit`, `npm run lint`, production build and isolated browser/API round trip using generated test secrets only.
-- [ ] Verify actual gzip download/registration, independent deployment-style historical reads and daily rendering/PNG after selected cleanup, all in temporary data directories.
-- [ ] Document password hash setup, session rotation, first-time storage preparation, monthly export/clear choices and bulk archive registration; no real delete on deployment/startup.
-- [ ] Request one fresh whole-change reviewer, fix important findings with RED→GREEN tests, re-run affected checks and complete delivery without publishing secrets or test data.
-- [ ] Commit final verified work and integrate into requested repository deployment flow; keep the existing live database unchanged.
+- [x] Run all tests, `npx tsc --noEmit`, `npm run lint`, production build and isolated browser/API round trip using generated test secrets only.
+- [x] Verify actual gzip download/registration, independent deployment-style historical reads and daily rendering/PNG after selected cleanup, all in temporary data directories.
+- [x] Document password hash setup, session rotation, first-time storage preparation, monthly export/clear choices and bulk archive registration; no real delete on deployment/startup.
+- [x] Request one fresh whole-change reviewer, fix important findings with RED→GREEN tests, re-run affected checks and complete delivery without publishing secrets or test data.
+- [x] Commit final verified work and integrate into requested repository deployment flow; keep the existing live database unchanged.
+
+## Final verification
+
+53 tests pass; typecheck and production build pass; lint has only the pre-existing image warning. Independent final review found three P2 issues, each reproduced RED→GREEN and fixed before push. Linux Docker runtime tests and the full browser download/cleanup/English-PNG flow pass. See `docs/superpowers/reviews/2026-11-13-admin-data-archives.md`.

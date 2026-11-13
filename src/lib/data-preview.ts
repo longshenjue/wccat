@@ -5,6 +5,10 @@ import {nextDay,type DateRange} from './data-range';
 
 export type ExportMode='full'|'daily';
 export type CleanupPreview={range:DateRange;cutoff:number;digest:string;counts:Record<BusinessTable,number>;eligibleDates:string[];protected:number;dailyKept:number;daysWithoutReports:string[];estimatedBytes:number};
+function canonicalRow(row:unknown){
+ const record=row as Record<string,unknown>;
+ return JSON.stringify(Object.fromEntries(Object.keys(record).sort().map(key=>[key,record[key]])))+'\n';
+}
 export function rangeQuery(table:BusinessTable,range:DateRange){
  const daily=table==='daily_reports';
  return {sql:DATE_COLUMNS[table]+' >= ? and '+DATE_COLUMNS[table]+' < ?',args:daily?[range.start,nextDay(range.end)]:[range.start+'-00',nextDay(range.end)+'-00']};
@@ -16,7 +20,7 @@ export function businessDigest(db:Database.Database,range:DateRange,mode:ExportM
   if(mode==='daily'&&table!=='daily_reports')continue;
   const query=rangeQuery(table,range);
   for(const row of db.prepare('select * from '+table+' where '+query.sql+' order by '+ORDER_COLUMNS[table]).iterate(...query.args)){
-   const text=JSON.stringify(row)+'\n';hash.update(text);bytes+=Buffer.byteLength(text);counts[table]++;
+   const text=canonicalRow(row);hash.update(text);bytes+=Buffer.byteLength(text);counts[table]++;
   }
  }return {digest:hash.digest('hex'),counts,bytes};
 }
@@ -32,7 +36,7 @@ export function previewCleanup(db:Database.Database,range:DateRange,now=Date.now
   const q=rangeQuery(table,range);
   for(const row of db.prepare('select * from '+table+' where '+q.sql+' order by '+ORDER_COLUMNS[table]).iterate(...q.args) as Iterable<Record<string,unknown>>){
    if(table!=='daily_reports'&&!selected.has(String(row[DATE_COLUMNS[table]])))continue;
-   const line=JSON.stringify(row)+'\n';hash.update(line);estimatedBytes+=Buffer.byteLength(line);counts[table]++;
+   const line=canonicalRow(row);hash.update(line);estimatedBytes+=Buffer.byteLength(line);counts[table]++;
   }
  }
  const reports=db.prepare('select payload from daily_reports').all() as {payload:string}[];

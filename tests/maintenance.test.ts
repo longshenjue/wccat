@@ -5,13 +5,16 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir,hostname} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {ensureMaintenanceSchema,guardedWrite,acquireMaintenance,releaseMaintenance,advanceGeneration,readGeneration,processAlive,processStamp} from '../src/lib/maintenance';
 
-test('cross-connection maintenance fences and late child writes cannot resurrect records',()=>{
+test('cross-connection maintenance fences and late child writes cannot resurrect records',async(t)=>{
+ // macOS sandbox can deny ps; isolate only that OS transport. Linux tests use /proc.
+ if(process.platform==='darwin')t.mock.method(require('node:child_process'),'execFileSync',()=> 'test-process-start');
+ const {ensureMaintenanceSchema,guardedWrite,acquireMaintenance,releaseMaintenance,advanceGeneration,readGeneration,processAlive,processStamp}=await import('../src/lib/maintenance');
  const dir=mkdtempSync(join(tmpdir(),'wccat-fence-'));
  const file=join(dir,'test.sqlite'), a=new Database(file), b=new Database(file);
  try{
   ensureMaintenanceSchema(a);a.exec('create table records(id integer primary key)');
+  assert.ok(processStamp(process.pid));
   assert.equal(processAlive(process.pid,hostname(),'different-process-start'),false,'a reused PID cannot own a previous task');
   assert.equal(processAlive(process.pid,hostname(),processStamp(process.pid)),true);
   const before=readGeneration(a);

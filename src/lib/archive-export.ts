@@ -10,10 +10,11 @@ import {fileSha256,requireDisk,validateArchive,type ArchiveMetadata} from './arc
 import {dbPath,exportsDir} from './storage-paths';
 import type {DateRange} from './data-range';
 export type ArchiveFile={id:string;name:string;path:string;sqlitePath:string;sha256:string;meta:ArchiveMetadata;downloaded?:boolean};
-export async function exportMonth(range:DateRange,mode:ExportMode,progress:(text:string)=>void=()=>{},cancelled:()=>boolean=()=>false):Promise<ArchiveFile>{
+export async function exportMonth(range:DateRange,mode:ExportMode,progress:(text:string)=>void=()=>{},cancelled:()=>boolean=()=>false,jobId?:string):Promise<ArchiveFile>{
  if(range.start.slice(0,7)!==range.end.slice(0,7))throw new Error('每个归档包只能包含一个月。');
  if(cancelled())throw new Error('任务已取消。');
- const id=randomUUID(),folder=join(exportsDir,id),name='wccat-'+range.start.slice(0,7)+'-'+range.start+'_'+range.end+'-'+id+'.sqlite.gz';
+ if(jobId&&!/^[a-f0-9-]{36}$/.test(jobId))throw new Error('导出任务标识无效。');
+ const id=randomUUID(),folder=jobId?join(exportsDir,jobId,id):join(exportsDir,id),name='wccat-'+range.start.slice(0,7)+'-'+range.start+'_'+range.end+'-'+id+'.sqlite.gz';
  mkdirSync(folder,{recursive:true,mode:0o700});
  const sqlitePath=join(folder,'data.sqlite'),path=join(folder,name);
  const source=new Database(dbPath,{readonly:true,fileMustExist:true});

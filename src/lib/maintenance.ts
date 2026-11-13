@@ -29,7 +29,7 @@ const ownStamp=nativeStamp(process.pid);
 export function processStamp(pid:number){return pid===process.pid?ownStamp:nativeStamp(pid);}
 export function processAlive(pid:number|null,host:string|null,stamp?:string|null){
  if(!pid||host!==hostname())return false;
- try{process.kill(pid,0);return !stamp||processStamp(pid)===stamp;}catch(error){return (error as NodeJS.ErrnoException).code==='EPERM';}
+ try{process.kill(pid,0);const actual=stamp?processStamp(pid):null;return !stamp||!actual||actual===stamp;}catch(error){return (error as NodeJS.ErrnoException).code==='EPERM';}
 }
 function state(db:Database.Database):State{
  let row=db.prepare('select owner,pid,host,generation,process_stamp as stamp from maintenance_state where id=1').get() as State;

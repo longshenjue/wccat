@@ -27,11 +27,14 @@ export function getJob(id:string):AdminJob{
 function recoverJobs(){
  const now=Date.now();
  for(const row of getDb().prepare("select * from admin_jobs where status in ('queued','running')").all() as JobRow[]){
-  if((row.pid&&!processAlive(row.pid,row.host,row.process_stamp))||(!row.pid&&now-row.created_at>60000))getDb().prepare("update admin_jobs set status='failed',error=?,updated_at=? where id=?").run('服务重启或任务进程退出；请检查任务结果后重试。',now,row.id);
+  if((row.pid&&!processAlive(row.pid,row.host,row.process_stamp))||(!row.pid&&now-row.created_at>60000)){
+   const recovered=getDb().prepare("update admin_jobs set status='failed',error=?,updated_at=? where id=? and status in ('queued','running') and pid is ? and process_stamp is ?").run('服务重启或任务进程退出；请检查任务结果后重试。',now,row.id,row.pid,row.process_stamp);
+   if(recovered.changes&&row.kind==='export')rmSync(jobExportDirectory(row.id),{recursive:true,force:true});
+  }
  }
 }
 export function getJobs(){
- recoverJobs();return (getDb().prepare('select * from admin_jobs order by created_at desc limit 30').all() as JobRow[]).map(fromRow);
+ recoverJobs();return (getDb().prepare("select * from admin_jobs where id in (select id from admin_jobs order by created_at desc limit 30) or (kind='export' and status='ready') order by created_at desc").all() as JobRow[]).map(fromRow);
 }
 function previewById(id:string|undefined):CleanupPreview{
  if(!id||!idPattern.test(id))throw new Error('请先生成清理预览。');
@@ -92,7 +95,7 @@ export function exportFile(jobId:string,fileId:string){
  if(!idPattern.test(fileId))throw new Error('文件标识无效。');
  const job=getJob(jobId),file=job.result.files?.find(item=>item.id===fileId);
  if(job.kind!=='export'||job.status!=='ready'||!file||!existsSync(file.path))throw new Error('文件不存在或已过期，请重新导出。');
- if(!file.path.startsWith(join(exportsDir,file.id)+sep))throw new Error('归档路径无效。');
+ if(!file.path.startsWith(join(jobExportDirectory(jobId),file.id)+sep))throw new Error('归档路径无效。');
  return file;
 }
 export function discardExport(id:string){
@@ -102,8 +105,12 @@ export function discardExport(id:string){
  expireExportFiles(job);
 }
 function expireExportFiles(job:AdminJob){
- for(const file of job.result.files??[])if(idPattern.test(file.id))rmSync(join(exportsDir,file.id),{recursive:true,force:true});
+ rmSync(jobExportDirectory(job.id),{recursive:true,force:true});
  getDb().prepare("update admin_jobs set status='expired',updated_at=? where id=?").run(Date.now(),job.id);
+}
+function jobExportDirectory(id:string){
+ if(!idPattern.test(id))throw new Error('任务标识无效。');
+ return join(exportsDir,id);
 }
 export async function runJob(id:string){
  let job=getJob(id);if(job.status!=='queued')throw new Error('任务已经运行或结束。');
@@ -123,11 +130,12 @@ export async function runJob(id:string){
    const previewId=randomUUID();getDb().prepare('insert into admin_previews values(?,?,?)').run(previewId,JSON.stringify(preview),Date.now());
    result={preview,previewId};
   }else if(input.kind==='export'){
-   for(const old of getJobs())if(old.kind==='export'&&old.status==='ready'&&Date.now()-old.updatedAt>86400000)expireExportFiles(old);
+   const expired=getDb().prepare("select * from admin_jobs where kind='export' and status='ready' and updated_at<?").all(Date.now()-86400000) as JobRow[];
+   for(const old of expired)expireExportFiles(fromRow(old));
    const range=parseRange(input.range),preview=previewById(input.previewId);
    if(JSON.stringify(range)!==JSON.stringify(preview.range)||previewCleanup(getDb(),range,Date.now(),preview.cutoff).digest!==preview.digest)throw new Error('数据版本已改变，请重新预览。');
    for(const part of splitMonths(range)){
-    const file=await exportMonth(part,input.mode!,progress,cancelled);files.push(file);
+    const file=await exportMonth(part,input.mode!,progress,cancelled,id);files.push(file);
     // The compressed archive was already verified; avoid keeping a second full-size copy.
     unlinkSync(file.sqlitePath);
    }
@@ -150,7 +158,7 @@ export async function runJob(id:string){
   }
   getDb().prepare('update admin_jobs set status=?,result=?,progress=?,updated_at=? where id=?').run(status,JSON.stringify(result),'任务完成',Date.now(),id);
  }catch(error){
-  for(const file of files)rmSync(join(exportsDir,file.id),{recursive:true,force:true});
+  if(job.kind==='export')rmSync(jobExportDirectory(id),{recursive:true,force:true});
   const message=error instanceof Error?error.message:'任务失败。';
   getDb().prepare('update admin_jobs set status=?,error=?,updated_at=? where id=?').run(message.includes('取消')?'cancelled':'failed',message,Date.now(),id);
  }finally{job=getJob(id);}
