@@ -4,17 +4,18 @@ export const ADMIN_COOKIE='wccat_admin';
 export const SESSION_SECONDS=8*3600;
 export class AdminError extends Error { constructor(message:string,public status=400){super(message);} }
 const attempts=new Map<string,{count:number;until:number}>();
+let globalAttempts={count:0,until:0};
 export function hashAdminPassword(password:string){
  if(password.length<12||password.length>1024)throw new Error('Password must contain 12–1024 characters.');
  const salt=randomBytes(16).toString('hex');
- return 'scrypt$'+salt+'$'+scryptSync(password,salt,64).toString('hex');
+ return 'scrypt:'+salt+':'+scryptSync(password,salt,64).toString('hex');
 }
 export function adminConfigured(){
- return /^scrypt\$[a-f0-9]{32}\$[a-f0-9]{128}$/.test(process.env.WCCAT_ADMIN_PASSWORD_HASH??'')&&(process.env.WCCAT_ADMIN_SESSION_SECRET?.length??0)>=32;
+ return /^scrypt[:$][a-f0-9]{32}[:$][a-f0-9]{128}$/.test(process.env.WCCAT_ADMIN_PASSWORD_HASH??'')&&(process.env.WCCAT_ADMIN_SESSION_SECRET?.length??0)>=32;
 }
 export function verifyAdminPassword(password:string){
  if(!adminConfigured()||typeof password!=='string'||password.length>1024)return false;
- const [,salt,hash]=process.env.WCCAT_ADMIN_PASSWORD_HASH!.split('$');
+ const [,salt,hash]=process.env.WCCAT_ADMIN_PASSWORD_HASH!.split(/[:$]/);
  return timingSafeEqual(Buffer.from(hash,'hex'),scryptSync(password,salt,64));
 }
 function sign(payload:string){
@@ -53,6 +54,8 @@ export function requireAdmin(request:Request,mutate=false){
  if(mutate)requireSameOrigin(request);
 }
 export function loginAllowed(key:string,now=Date.now()){
+ if(globalAttempts.until<=now)globalAttempts={count:0,until:now+15*60*1000};
+ if(++globalAttempts.count>30)return false;
  for(const [ip,value] of attempts)if(value.until<=now)attempts.delete(ip);
  let entry=attempts.get(key);
  if(!entry){

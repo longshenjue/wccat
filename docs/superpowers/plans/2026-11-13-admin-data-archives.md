@@ -1,6 +1,6 @@
 # Admin Data Archives Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add an authenticated admin UI for portable monthly archives and deliberate hourly-history cleanup while permanently retaining generated daily reports.
 
@@ -36,10 +36,10 @@
 
 **Interfaces:** `hashAdminPassword(password): string`, `adminConfigured(): boolean`, `createAdminSession(now?): string`, `verifyAdminSession(token, now?): boolean`, `requireAdmin(request, mutate?): void`; cookie `wccat_admin`, 8-hour TTL. Password format scrypt with random salt; rotation invalidates sessions.
 
-- [ ] Write/run RED tests for wrong password, expiration, tampering, missing secrets, cross-origin mutation and rate limit.
-- [ ] Implement auth, bounded login throttling, runtime-only Secure/HttpOnly/SameSite cookie routes and hidden-input password-hash CLI.
-- [ ] Run `node --import tsx --test tests/admin-auth.test.ts`; expect all assertions passing.
-- [ ] Commit auth implementation and evidence.
+- [x] Write/run RED tests for wrong password, expiration, tampering, missing secrets, cross-origin mutation and rate limit.
+- [x] Implement auth, bounded login throttling, runtime-only Secure/HttpOnly/SameSite cookie routes and hidden-input password-hash CLI.
+- [x] Run `node --import tsx --test tests/admin-auth.test.ts`; expect all assertions passing.
+- [x] Commit auth implementation and evidence.
 
 ### Task 2: Storage schema and cross-process write fencing
 
@@ -47,11 +47,11 @@
 
 **Interfaces:** Paths `dataDir`, `dbPath`, `exportsDir`, `archivesDir`; `createBusinessSchema(database)`; `writeGeneration(): number`; `guardedWrite(database, fn, expectedGeneration?): T`; `acquireMaintenance(database, owner): void`, `releaseMaintenance(database, owner): void`. Persist owner pid/hostname and generation, recover dead owners safely.
 
-- [ ] Write/run RED tests using independently opened SQLite connections for active maintenance, stale generation, dead owner recovery and child-process late writes.
-- [ ] Extract compatible business schema; add operational maintenance/task tables, incremental auto-vacuum only on newly created databases.
-- [ ] Guard every production business writer; capture expected generation before asynchronous collection/AI/translation, including fallback/log writes.
-- [ ] Run `node --import tsx --test tests/maintenance.test.ts` and existing persistence/analysis tests; expect no resurrection and unchanged old behavior outside maintenance.
-- [ ] Commit schema and write-fence integration.
+- [x] Write/run RED tests using independently opened SQLite connections for active maintenance, stale generation, dead owner recovery and child-process late writes.
+- [x] Extract compatible business schema; add operational maintenance/task tables, incremental auto-vacuum only on newly created databases.
+- [x] Guard every production business writer; capture expected generation before asynchronous collection/AI/translation, including fallback/log writes.
+- [x] Run `node --import tsx --test tests/maintenance.test.ts` and existing persistence/analysis tests; expect no resurrection and unchanged old behavior outside maintenance.
+- [x] Commit schema and write-fence integration.
 
 ### Task 3: Range previews and portable monthly export
 
@@ -59,11 +59,11 @@
 
 **Interfaces:** `parseRange({start,end}): DateRange`, `splitMonths(range): DateRange[]`; `previewCleanup(range, now?): CleanupPreview` with digest, protected rows, table counts and missing-report dates; `exportMonth(range, mode, progress, cancelled): Promise<ArchiveFile>`; `validateArchive(path): ArchiveMetadata`.
 
-- [ ] Write/run RED tests for one chosen month out of three, boundary dates, daily-only/full export round trip, mutation-free preview, and cancellation leaving source unchanged.
-- [ ] Export consistent independently read transactions into versioned whitelisted schemas, sorted row/metadata digests, gzip streaming, SHA-256 and disk-budget checks. Support old primary keys without merging autoincrement identities across deployments.
-- [ ] Validate format/header/schema, integrity_check, counts, hashes and ranges before offering download. No public paths or arbitrary filenames.
-- [ ] Run `node --import tsx --test tests/archive-export.test.ts`; expect source tables byte-for-byte unchanged.
-- [ ] Commit export/range primitives.
+- [x] Write/run RED tests for one chosen month out of three, boundary dates, daily-only/full export round trip, mutation-free preview, and cancellation leaving source unchanged.
+- [x] Export consistent independently read transactions into versioned whitelisted schemas, sorted row/metadata digests, gzip streaming, SHA-256 and disk-budget checks. Support old primary keys without merging autoincrement identities across deployments.
+- [x] Validate format/header/schema, integrity_check, counts, hashes and ranges before offering download. No public paths or arbitrary filenames.
+- [x] Run `node --import tsx --test tests/archive-export.test.ts`; expect source tables byte-for-byte unchanged.
+- [x] Commit export/range primitives.
 
 ### Task 4: Archive registration and merged historical reads
 
@@ -71,11 +71,11 @@
 
 **Interfaces:** `registerArchives(paths): Promise<RegistrationResult[]>`; `archiveDatabases(): Database[]` with bounded caching; query adapters select newest generated snapshot/report, same-generation main first, children from same source. Registration validates before atomic publication and is idempotent by content.
 
-- [ ] Write/run RED tests for same file twice, overlapping partial months, >10 months, cross-month last-24-hour selection, corrupt schema, decompression budget and newer main English retention.
-- [ ] Implement safe CLI gzip extraction/validation and catalog refresh with bounded connections; no startup imports or mutations during reads.
-- [ ] Route hourly/daily/analysis date reads through merged sources; an explicitly absent/deleted hourly date returns a clear empty state rather than latest data.
-- [ ] Run `node --import tsx --test tests/archive-catalog.test.ts` plus daily-window/persistence tests; expect deterministic deduplication.
-- [ ] Commit archive recovery/query integration.
+- [x] Write/run RED tests for same file twice, overlapping partial months, >10 months, cross-month last-24-hour selection, corrupt schema, decompression budget and newer main English retention.
+- [x] Implement safe CLI gzip extraction/validation and catalog refresh with bounded connections; no startup imports or mutations during reads.
+- [x] Route hourly/daily/analysis date reads through merged sources; an explicitly absent/deleted hourly date returns a clear empty state rather than latest data.
+- [x] Run `node --import tsx --test tests/archive-catalog.test.ts` plus daily-window/persistence tests; expect deterministic deduplication.
+- [x] Commit archive recovery/query integration.
 
 ### Task 5: Persistent jobs, deliberate cleanup and actual disk reclaim
 
@@ -83,12 +83,12 @@
 
 **Interfaces:** `createJob(input): AdminJob`, `runJob(id): Promise<void>`, `getJobs(): AdminJob[]`, `cancelJob(id): void`; job states queued/running/ready/complete/failed/cancelled; selected cleanup binds range+digest+mode+optional downloaded export IDs.
 
-- [ ] Write/run RED tests for cleanup preserving daily payloads, last-48-hour/latest protection, fingerprint conflict, archive acknowledgement missing, insufficient disk and failure recovery.
-- [ ] Add one active job globally, separate Node task runner, progress/cancellation/restart recovery and safe temporary export lifetime. Download completion + explicit admin acknowledgement required for export-then-cleanup.
-- [ ] Implement maintenance-fenced revalidation and atomic table deletion including AI logs, generation increment, incremental reclaim/checkpoint with before/after actual disk sizes.
-- [ ] For old databases, provide controlled initialization CLI and UI task with free-space preflight before VACUUM; failed initialization keeps business rows untouched. Failed post-delete reclaim reports logical deletion separately and allows reclaim retry.
-- [ ] Run task tests and whole `npm test`; expect no unrelated/daily data loss and truthful physical-space reporting.
-- [ ] Commit job/cleanup implementation.
+- [x] Write/run RED tests for cleanup preserving daily payloads, last-48-hour/latest protection, fingerprint conflict, archive acknowledgement missing, insufficient disk and failure recovery.
+- [x] Add one active job globally, separate Node task runner, progress/cancellation/restart recovery and safe temporary export lifetime. Download completion + explicit admin acknowledgement required for export-then-cleanup.
+- [x] Implement maintenance-fenced revalidation and atomic table deletion including AI logs, generation increment, incremental reclaim/checkpoint with before/after actual disk sizes.
+- [x] For old databases, provide controlled initialization CLI and UI task with free-space preflight before VACUUM; failed initialization keeps business rows untouched. Failed post-delete reclaim reports logical deletion separately and allows reclaim retry.
+- [x] Run task tests and whole `npm test`; expect no unrelated/daily data loss and truthful physical-space reporting.
+- [x] Commit job/cleanup implementation.
 
 ### Task 6: Authenticated management API and administrator UI
 
@@ -96,11 +96,11 @@
 
 **Interfaces:** GET admin data returns capacity/months/previews/jobs or one authenticated server-ID download; POST accepts typed preview/export/cleanup/reclaim/cancel/discard operations. Mutations require same-origin session and validated JSON; download has no-store and safe attachment headers.
 
-- [ ] Write/run RED tests for unauthenticated resource access, bad origin, invalid ranges, unsafe IDs and full-mode-only export cleanup.
-- [ ] Build login/logout, month/date selectors, counts/capacity/progress, separate download and cleanup actions, explicit confirmations including missing reports, hashes and failure/retry controls.
-- [ ] Add long-term daily date/month navigation while retaining the original public page design; preserve existing PNG behavior.
-- [ ] Run API tests, lint and typecheck; expect no production arbitrary CRUD or public generation regression.
-- [ ] Commit admin experience.
+- [x] Write/run RED tests for unauthenticated resource access, bad origin, invalid ranges, unsafe IDs and full-mode-only export cleanup.
+- [x] Build login/logout, month/date selectors, counts/capacity/progress, separate download and cleanup actions, explicit confirmations including missing reports, hashes and failure/retry controls.
+- [x] Add long-term daily date/month navigation while retaining the original public page design; preserve existing PNG behavior.
+- [x] Run API tests, lint and typecheck; expect no production arbitrary CRUD or public generation regression.
+- [x] Commit admin experience.
 
 ### Task 7: Verification, documentation and delivery
 

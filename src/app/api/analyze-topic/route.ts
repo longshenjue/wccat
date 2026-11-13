@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { saveTopicAnalysisToDb } from "@/lib/db";
+import { saveTopicAnalysisToDb, writeGeneration } from "@/lib/db";
 import { fetchArticleContexts } from "@/lib/fulltext";
 import { analyzeTopicWithDeepSeek } from "@/lib/topic-analysis";
 import type { TopicGroup } from "@/lib/types";
@@ -11,6 +11,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   try {
+    const generation = writeGeneration();
     const body = (await request.json()) as TopicGroup | { date?: string; topic?: TopicGroup };
     const topic = isTopicRequest(body) ? body.topic : body;
     const date = "date" in body ? body.date : undefined;
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     const contexts = await fetchArticleContexts(topic.occurrences);
     const analysis = await analyzeTopicWithDeepSeek(topic, contexts, undefined);
     if (date) {
-      saveTopicAnalysisToDb(date, topic.id, analysis);
+      saveTopicAnalysisToDb(date, topic.id, analysis, generation);
     }
 
     return NextResponse.json(analysis);

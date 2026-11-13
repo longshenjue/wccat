@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getDb, writeGeneration } from "@/lib/db";
+import { guardedWrite } from "@/lib/maintenance";
 
 export const dynamic = "force-dynamic";
 
@@ -150,6 +151,7 @@ export async function POST(request: Request) {
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const generation = writeGeneration();
   const body = (await request.json()) as { table?: string; values?: Record<string, unknown> };
   const table = getAdminTable(body.table);
   if (!table || !body.values || typeof body.values !== "object") {
@@ -162,13 +164,13 @@ export async function POST(request: Request) {
   }
 
   const columns = Object.keys(values);
-  getDb()
+  guardedWrite(getDb(), () => getDb()
     .prepare(
       `insert into ${quoteIdentifier(table.name)} (${columns.map(quoteIdentifier).join(", ")}) values (${columns
         .map(() => "?")
         .join(", ")})`
     )
-    .run(...columns.map((column) => values[column]));
+    .run(...columns.map((column) => values[column])), generation);
 
   return NextResponse.json({ ok: true });
 }
@@ -177,6 +179,7 @@ export async function PATCH(request: Request) {
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const generation = writeGeneration();
   const body = (await request.json()) as {
     table?: string;
     key?: Record<string, unknown>;
@@ -197,13 +200,13 @@ export async function PATCH(request: Request) {
   }
 
   const valueColumns = Object.keys(values);
-  getDb()
+  guardedWrite(getDb(), () => getDb()
     .prepare(
       `update ${quoteIdentifier(table.name)} set ${valueColumns
         .map((column) => `${quoteIdentifier(column)} = ?`)
         .join(", ")} where ${table.primaryKeys.map((column) => `${quoteIdentifier(column)} = ?`).join(" and ")}`
     )
-    .run(...valueColumns.map((column) => values[column]), ...table.primaryKeys.map((column) => key[column]));
+    .run(...valueColumns.map((column) => values[column]), ...table.primaryKeys.map((column) => key[column])), generation);
 
   return NextResponse.json({ ok: true });
 }
@@ -212,6 +215,7 @@ export async function DELETE(request: Request) {
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const generation = writeGeneration();
   const body = (await request.json()) as { table?: string; key?: Record<string, unknown> };
   const table = getAdminTable(body.table);
   if (!table || !body.key) {
@@ -223,13 +227,13 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Missing key" }, { status: 400 });
   }
 
-  getDb()
+  guardedWrite(getDb(), () => getDb()
     .prepare(
       `delete from ${quoteIdentifier(table.name)} where ${table.primaryKeys
         .map((column) => `${quoteIdentifier(column)} = ?`)
         .join(" and ")}`
     )
-    .run(...table.primaryKeys.map((column) => key[column]));
+    .run(...table.primaryKeys.map((column) => key[column])), generation);
 
   return NextResponse.json({ ok: true });
 }

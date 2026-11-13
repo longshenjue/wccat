@@ -95,6 +95,17 @@ report at 00:10 Asia/Shanghai. Keep the worker running in a separate terminal.
 
 Run `npm test` for daily-window and translation-validation regression checks.
 
+## Administrator data archives
+
+Follow [administrator setup and archive recovery](docs/admin-data-archives.md).
+Run `npm run admin:password` to generate runtime administrator secrets, then
+visit `/admin`. The authenticated dashboard previews date ranges, exports full
+or daily-only monthly SQLite archives, and deliberately clears old hourly data
+while retaining all generated daily reports. No scheduled deletion is enabled.
+Use `npm run storage:prepare` for an older database's first-time space-reclaim
+setup, and `npm run archives:register -- <archive.sqlite.gz> ...` to recover
+portable archives on another deployment.
+
 ## Source Check (2026-11-12)
 
 The local DailyHotApi checkout matches upstream `36c77e3` (2026-03-11). No newer

@@ -5,13 +5,15 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir,hostname} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {ensureMaintenanceSchema,guardedWrite,acquireMaintenance,releaseMaintenance,advanceGeneration,readGeneration} from '../src/lib/maintenance';
+import {ensureMaintenanceSchema,guardedWrite,acquireMaintenance,releaseMaintenance,advanceGeneration,readGeneration,processAlive,processStamp} from '../src/lib/maintenance';
 
 test('cross-connection maintenance fences and late child writes cannot resurrect records',()=>{
  const dir=mkdtempSync(join(tmpdir(),'wccat-fence-'));
  const file=join(dir,'test.sqlite'), a=new Database(file), b=new Database(file);
  try{
   ensureMaintenanceSchema(a);a.exec('create table records(id integer primary key)');
+  assert.equal(processAlive(process.pid,hostname(),'different-process-start'),false,'a reused PID cannot own a previous task');
+  assert.equal(processAlive(process.pid,hostname(),processStamp(process.pid)),true);
   const before=readGeneration(a);
   guardedWrite(a,()=>a.prepare('insert into records values(1)').run(),before);
   acquireMaintenance(a,'test-owner');

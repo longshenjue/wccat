@@ -67,6 +67,6 @@ function emptySnapshot(date: string): DailySnapshot {
     sources: SOURCES,
     rawItems: [],
     topics: [],
-    digest: buildDailyDigest(date, [])
+    digest: {...buildDailyDigest(date, []), headline: `${date} 暂无小时记录`, overview: "该小时记录尚未采集或已清理。已生成的日报仍可在日报页查看。"}
   };
 }

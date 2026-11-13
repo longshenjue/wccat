@@ -11,12 +11,12 @@ import {previewCleanup,businessDigest,type CleanupPreview,type ExportMode} from 
 import {exportMonth,type ArchiveFile} from './archive-export';
 import {cleanupData,maintainStorage,storageUsage} from './data-cleanup';
 import {fileSha256} from './archive-format';
-import {processAlive} from './maintenance';
+import {processAlive,processStamp} from './maintenance';
 
 export type JobInput={kind:'preview'|'export'|'cleanup'|'prepare'|'reclaim';range?:DateRange;mode?:ExportMode;previewId?:string;exportJobId?:string;ackDownloaded?:boolean;discardHourly?:boolean;ackMissingReports?:boolean};
 export type JobResult={preview?:CleanupPreview;previewId?:string;files?:ArchiveFile[];cleanup?:Awaited<ReturnType<typeof cleanupData>>;storage?:Awaited<ReturnType<typeof maintainStorage>>};
 export type AdminJob={id:string;kind:JobInput['kind'];status:string;input:JobInput;result:JobResult;error:string|null;progress:string;pid:number|null;host:string|null;createdAt:number;updatedAt:number;cancelled:boolean};
-type JobRow={id:string;kind:JobInput['kind'];status:string;input:string;result:string|null;error:string|null;progress:string|null;pid:number|null;host:string|null;created_at:number;updated_at:number;cancelled:number};
+type JobRow={id:string;kind:JobInput['kind'];status:string;input:string;result:string|null;error:string|null;progress:string|null;pid:number|null;host:string|null;process_stamp:string|null;created_at:number;updated_at:number;cancelled:number};
 const idPattern=/^[a-f0-9-]{36}$/;
 function fromRow(row:JobRow):AdminJob{return {id:row.id,kind:row.kind,status:row.status,input:JSON.parse(row.input),result:row.result?JSON.parse(row.result):{},error:row.error,progress:row.progress??'',pid:row.pid,host:row.host,createdAt:row.created_at,updatedAt:row.updated_at,cancelled:Boolean(row.cancelled)};}
 export function getJob(id:string):AdminJob{
@@ -27,7 +27,7 @@ export function getJob(id:string):AdminJob{
 function recoverJobs(){
  const now=Date.now();
  for(const row of getDb().prepare("select * from admin_jobs where status in ('queued','running')").all() as JobRow[]){
-  if((row.pid&&!processAlive(row.pid,row.host))||(!row.pid&&now-row.created_at>60000))getDb().prepare("update admin_jobs set status='failed',error=?,updated_at=? where id=?").run('服务重启或任务进程退出；请检查任务结果后重试。',now,row.id);
+  if((row.pid&&!processAlive(row.pid,row.host,row.process_stamp))||(!row.pid&&now-row.created_at>60000))getDb().prepare("update admin_jobs set status='failed',error=?,updated_at=? where id=?").run('服务重启或任务进程退出；请检查任务结果后重试。',now,row.id);
  }
 }
 export function getJobs(){
@@ -39,6 +39,7 @@ function previewById(id:string|undefined):CleanupPreview{
  if(!row||Date.now()-row.created_at>86400000)throw new Error('预览不存在或已过期，请重新预览。');
  return JSON.parse(row.payload);
 }
+export function getCleanupPreview(id:string){return previewById(id);}
 function verifyProof(input:JobInput,preview:CleanupPreview){
  if(preview.daysWithoutReports.length&&!input.ackMissingReports)throw new Error('请确认未生成日报的日期也允许清理。');
  if(input.exportJobId){
@@ -65,7 +66,7 @@ export function createJob(input:JobInput):AdminJob{
  }).immediate();
  try{
   const child=spawn(process.execPath,['--import','tsx',resolve('scripts/admin-job.ts'),id],{cwd:process.cwd(),env:process.env,stdio:'ignore'});
-  getDb().prepare("update admin_jobs set pid=?,host=? where id=? and status='queued'").run(child.pid??null,hostname(),id);
+  getDb().prepare("update admin_jobs set pid=?,host=?,process_stamp=? where id=? and status='queued'").run(child.pid??null,hostname(),child.pid?processStamp(child.pid):null,id);
   child.on('error',()=>getDb().prepare("update admin_jobs set status='failed',error=?,updated_at=? where id=?").run('无法启动后台任务进程。',Date.now(),id));
   child.unref();
  }catch(error){
@@ -106,7 +107,7 @@ function expireExportFiles(job:AdminJob){
 }
 export async function runJob(id:string){
  let job=getJob(id);if(job.status!=='queued')throw new Error('任务已经运行或结束。');
- const changed=getDb().prepare("update admin_jobs set status='running',pid=?,host=?,updated_at=? where id=? and status='queued'").run(process.pid,hostname(),Date.now(),id);
+ const changed=getDb().prepare("update admin_jobs set status='running',pid=?,host=?,process_stamp=?,updated_at=? where id=? and status='queued'").run(process.pid,hostname(),processStamp(process.pid),Date.now(),id);
  if(changed.changes!==1)throw new Error('另一个进程已领取任务。');
  const progress=(text:string)=>getDb().prepare('update admin_jobs set progress=?,updated_at=? where id=?').run(text,Date.now(),id);
  const cancelled=()=>Boolean((getDb().prepare('select cancelled from admin_jobs where id=?').get(id) as {cancelled:number}).cancelled);

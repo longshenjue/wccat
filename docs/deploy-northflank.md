@@ -130,7 +130,7 @@ npm run check:sources
 
 检查Logs中的`starting web + worker`、`stored ... raw items ... topics`和`next hourly refresh`。重启一次WcCAT，确认历史快照仍存在，证明持久卷生效。
 
-生产环境中`/admin`、`/api/admin/db`、`/api/analyze-topic`返回404；公开刷新接口也保持关闭。维护通过受控Shell执行。图片代理仅允许已知平台CDN，并逐跳校验重定向目标。
+生产环境中旧的任意表CRUD接口`/api/admin/db`、`/api/analyze-topic`返回404；公开刷新接口保持关闭。新的`/admin`只有配置管理员Runtime秘密后才启用，下载、预览和清理均验证管理员会话。按[管理员归档与清理说明](admin-data-archives.md)执行`npm run admin:password`生成`WCCAT_ADMIN_PASSWORD_HASH`与`WCCAT_ADMIN_SESSION_SECRET`，配置并重启后登录。首次尽早启用空间回收；保留日报并按需处理旧小时数据，不设置自动删除。图片代理仅允许已知平台CDN，并逐跳校验重定向目标。
 
 ## 6. 本地历史数据迁移（可选）
 

@@ -30,6 +30,9 @@ test('admin credentials, expiring sessions, rotation and same-origin mutations',
   for(let i=0;i<5;i++)assert.equal(loginAllowed('test-ip',now),true);
   assert.equal(loginAllowed('test-ip',now),false);
   assert.equal(loginAllowed('test-ip',now+15*60*1000+1),true);
+  const rotated=now+31*60*1000;
+  for(let i=0;i<30;i++)assert.equal(loginAllowed('rotated-'+i,rotated),true);
+  assert.equal(loginAllowed('rotated-over-budget',rotated),false);
  }finally{
   if(oldHash===undefined)delete process.env.WCCAT_ADMIN_PASSWORD_HASH;else process.env.WCCAT_ADMIN_PASSWORD_HASH=oldHash;
   if(oldSecret===undefined)delete process.env.WCCAT_ADMIN_SESSION_SECRET;else process.env.WCCAT_ADMIN_SESSION_SECRET=oldSecret;

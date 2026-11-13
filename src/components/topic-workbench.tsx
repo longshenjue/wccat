@@ -217,10 +217,10 @@ function HeaderPanel({
     <header className="topbar editorial-header">
       <div className="header-copy">
         <p className="eyebrow">Today</p>
-        <h2>当前最热话题「{topTopicTitle}」</h2>
+        <h2>{topics.length ? `当前最热话题「${topTopicTitle}」` : digest.headline}</h2>
         <p className="top-topic-line">
-          其他高热话题：
-          <span>{topTopicLine}</span>
+          {topics.length ? "其他高热话题：" : ""}
+          <span>{topics.length ? topTopicLine : digest.overview}</span>
         </p>
         <div className="signal-strip" aria-label="本小时情绪分布">
           {headerSignals.map((item) => (

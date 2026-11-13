@@ -2,17 +2,23 @@ import Link from "next/link";
 import { DailyWorkbench } from "@/components/daily-workbench";
 import { getDailyReport } from "@/lib/daily-report";
 import { listDailyReportDatesFromDb } from "@/lib/db";
+import "@/components/daily-archive.css";
 
 export const dynamic = "force-dynamic";
 
 type DailyPageProps = {
-  searchParams?: Promise<{ date?: string }>;
+  searchParams?: Promise<{ date?: string; month?: string }>;
 };
 
 export default async function DailyPage({ searchParams }: DailyPageProps) {
   const params = (await searchParams) ?? {};
-  const report = getDailyReport(params.date);
   const dates = listDailyReportDatesFromDb();
+  const month = /^\d{4}-\d{2}$/.test(params.month ?? "") ? params.month : undefined;
+  const selectedDate = params.date ?? (month ? dates.find(date => date.startsWith(month)) : undefined);
+  const report = month && !selectedDate ? null : getDailyReport(selectedDate);
+  const selectedMonth = month ?? report?.reportDate.slice(0,7);
+  const visibleDates = selectedMonth ? dates.filter(date => date.startsWith(selectedMonth)) : dates;
+  const months = [...new Set(dates.map(date => date.slice(0,7)))];
 
   return (
     <main className="shell daily-shell">
@@ -37,8 +43,9 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
 
         <section className="nav-card">
           <span className="nav-title">Daily Archive</span>
+          {months.length > 0 ? <form action="/daily" className="daily-archive-form"><label htmlFor="daily-archive-month">按月份查看</label><select id="daily-archive-month" name="month" defaultValue={selectedMonth}>{months.map(value=><option key={value} value={value}>{value}</option>)}</select><button type="submit">查看月份</button></form> : null}
           {dates.length > 0 ? (
-            dates.slice(0, 12).map((date) => (
+            visibleDates.map((date) => (
               <Link
                 className={date === report?.reportDate ? "active nav-link" : "nav-link"}
                 href={`/daily?date=${date}`}
