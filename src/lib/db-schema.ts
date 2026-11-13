@@ -30,6 +30,8 @@ export function createBusinessSchema(database: Database.Database) {
       foreign key(snapshot_date) references snapshots(date) on delete cascade
     );
 
+    create index if not exists snapshots_collected_time_idx on snapshots(julianday(generated_at));
+
     create index if not exists raw_items_snapshot_source_idx
       on raw_items(snapshot_date, source_id, rank);
 

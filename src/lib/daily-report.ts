@@ -2,15 +2,13 @@ import { getChinaSnapshotId } from "./date";
 import {
   readDailyReportFromDb,
   readLatestDailyReportFromDb,
-  readRecentSnapshotsFromDb,
-  readSnapshotFromDb,
   readTopicAnalysesForDate,
   saveDailyReportToDb,
   saveDailyShareEnglishToDb,
   writeGeneration
 } from "./db";
 import { normalizeTitle } from "./normalize";
-import { getDailyReportWindow, selectDailySnapshots } from "./daily-window";
+import { readDailyReportInput } from "./daily-report-input";
 import { translateDailyShare } from "./daily-share-translation";
 import type { DailyShareCopy } from "./daily-share-copy";
 import { sentimentLabel } from "./sentiment";
@@ -61,6 +59,7 @@ export type WccatDailyReport = {
   videoScript: string;
   model: string;
   shareEnglish?: DailyShareCopy;
+  collection?: {observedUntil:string;complete:boolean;sampleCount:number;firstCollectedAt?:string;lastCollectedAt?:string};
 };
 
 type TopicBucket = {
@@ -82,20 +81,19 @@ type TopicBucket = {
 type GeneratedDrafts = Pick<WccatDailyReport, "headline" | "overview" | "wechatDraft" | "videoScript" | "model">;
 export type GenerationLog = (level: "info" | "warn" | "error", message: string) => void;
 
-export async function generateDailyReport(inputDate = new Date(), options: {requireData?:boolean;log?:GenerationLog} = {}) {
+export async function generateDailyReport(inputDate = new Date(), options: {requireData?:boolean;log?:GenerationLog;observedUntil?:Date} = {}) {
   const log:GenerationLog = options.log ?? ((level,message)=>console[level]('[WcCAT] '+redactJobMessage(message)));
   const generation = writeGeneration();
-  const { start, end, reportDate } = getDailyReportWindow(inputDate);
+  const { start, end, reportDate, snapshots, analyses, collection } = readDailyReportInput(inputDate, options.observedUntil ?? new Date());
   log('info', `开始生成 ${reportDate} 日报，统计窗口 ${getChinaSnapshotId(start)}:00 → ${getChinaSnapshotId(end)}:00 UTC+8`);
-  // A 24-hour window can overlap 25 hour-keyed buckets at its two boundaries.
-  const snapshots = selectDailySnapshots(readRecentSnapshotsFromDb(25, getChinaSnapshotId(end)), end);
+  if(!collection.complete)log('warn', `提前生成：统计窗口未结束，仅使用截至 ${collection.observedUntil} 的采样`);
   log('info', `已读取 ${snapshots.length} 次采样，正在汇总 Top10`);
-  const topics = buildDailyTopTopics(snapshots).slice(0, 10);
+  const topics = buildDailyTopTopics(snapshots,date=>analyses[date]??{}).slice(0, 10);
   if(options.requireData && (!snapshots.length || !topics.length)) throw new Error('该统计窗口没有有效快照或话题，已有日报保持不变。');
   log('info', `Top10 汇总完成：${topics.length} 个话题`);
   const top = topics[0];
   if (top && (!top.aiAnalysis || top.aiAnalysis.model === "local-rules") && top.analysisSnapshotDate) {
-    const snapshot = readSnapshotFromDb(top.analysisSnapshotDate);
+    const snapshot = snapshots.find(value=>value.date===top.analysisSnapshotDate);
     const original = snapshot?.topics.find((topic) => topic.id === top.analysisTopicId);
     if (original) {
       log('info', '正在补充 TOP1 AI 分析');
@@ -107,14 +105,16 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
   if(top) log(top.aiAnalysis && top.aiAnalysis.model!=='local-rules'?'info':'warn', `TOP1 分析来源：${top.aiAnalysis?.model ?? '无分析'}${top.aiAnalysis?.model==='local-rules'?'（本地规则回退）':''}`);
   log('info', '正在生成中文日报稿件');
   const drafts = await generateDrafts(reportDate, snapshots, topics, {
-    start: getChinaSnapshotId(start), end: getChinaSnapshotId(end)
+    start: getChinaSnapshotId(start), end: getChinaSnapshotId(end),complete:collection.complete,observedUntil:collection.observedUntil
   },log);
+  if(!collection.complete)drafts.overview='提前生成，统计窗口尚未结束。'+drafts.overview;
   const report: WccatDailyReport = {
     reportDate,
     generatedAt: new Date().toISOString(),
     windowStart: getChinaSnapshotId(start),
     windowEnd: getChinaSnapshotId(end),
     topics,
+    collection,
     ...drafts
   };
 
@@ -138,7 +138,7 @@ export function getDailyReport(reportDate?: string) {
   return readLatestDailyReportFromDb();
 }
 
-export function buildDailyTopTopics(snapshots: DailySnapshot[]) {
+export function buildDailyTopTopics(snapshots: DailySnapshot[],analysisReader=readTopicAnalysesForDate) {
   const buckets = new Map<string, TopicBucket>();
   const snapshotDates = [...new Set(snapshots.map(snapshot => snapshot.date))].sort();
   // Normalize persistence weighting for hourly legacy data and four-hour samples.
@@ -195,7 +195,7 @@ export function buildDailyTopTopics(snapshots: DailySnapshot[]) {
 
   return [...buckets.values()]
     .map(bucket => toDailyReportTopic(bucket, snapshotDates.length, sampleWeight))
-    .map((topic) => attachTopicAnalysis(topic, analysisCache))
+    .map((topic) => attachTopicAnalysis(topic, analysisCache,analysisReader))
     .sort((left, right) => right.dailyScore - left.dailyScore)
     .map((topic, index) => ({ ...topic, rank: index + 1 }));
 }
@@ -242,14 +242,15 @@ function toDailyReportTopic(bucket: TopicBucket, totalSamples: number, sampleWei
 
 function attachTopicAnalysis(
   topic: DailyReportTopic,
-  analysisCache: Map<string, ReturnType<typeof readTopicAnalysesForDate>>
+  analysisCache: Map<string, ReturnType<typeof readTopicAnalysesForDate>>,
+  analysisReader:typeof readTopicAnalysesForDate
 ): DailyReportTopic {
   if (!topic.analysisSnapshotDate || !topic.analysisTopicId) {
     return topic;
   }
 
   const analyses =
-    analysisCache.get(topic.analysisSnapshotDate) ?? readTopicAnalysesForDate(topic.analysisSnapshotDate);
+    analysisCache.get(topic.analysisSnapshotDate) ?? analysisReader(topic.analysisSnapshotDate);
   analysisCache.set(topic.analysisSnapshotDate, analyses);
 
   const aiAnalysis = analyses[topic.analysisTopicId];
@@ -269,7 +270,7 @@ async function generateDrafts(
   reportDate: string,
   snapshots: DailySnapshot[],
   topics: DailyReportTopic[],
-  window: { start: string; end: string },
+  window: { start: string; end: string;complete?:boolean;observedUntil?:string },
   log: GenerationLog
 ): Promise<GeneratedDrafts> {
   const fallback = buildFallbackDrafts(reportDate, snapshots, topics);
@@ -375,6 +376,7 @@ function buildDailySystemPrompt() {
 - 不要写成热搜搬运，要解释“今天中文互联网在关心什么”。
 - 没有证据的事实不要补充；可以使用“从榜单信号看”。
 - sampleCount 是采样出现次数，sampleCoverage 是采样覆盖率；采样次数不等于持续小时数，不推断未观测时段。
+- window.complete 为 false 时是提前生成，只根据截至 observedUntil 的已有材料写作，不将其描述为全天最终结论。
 - 公众号稿要适合截图/排版，视频稿要适合抖音和 B 站口播。`;
 }
 

@@ -46,6 +46,7 @@ export function DailyWorkbench({ report }: DailyWorkbenchProps) {
               <span>{report.overview}</span>
             </p>
             <div className="signal-strip" aria-label="日报核心信号">
+              {report.collection&&!report.collection.complete?<span className="header-signal red"><small>统计窗口未结束</small><b>提前生成</b></span>:null}
               <span className="header-signal red">
                 <small>Top 10</small>
                 <b>{report.topics.length}</b>
@@ -59,6 +60,7 @@ export function DailyWorkbench({ report }: DailyWorkbenchProps) {
                 <b>{report.model}</b>
               </span>
             </div>
+            {report.collection?<p className="daily-collection-note">实际采样 {report.collection.sampleCount} 次 · 截至 {getChinaDateTime(new Date(report.collection.observedUntil))}（北京时间）</p>:null}
           </div>
 
           <div className="header-facts daily-header-facts">

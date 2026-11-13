@@ -1,0 +1,10 @@
+import type {TopicAnalysis} from './topic-analysis';
+import type {RawHotItem,TopicGroup} from './types';
+import type {WccatDailyReport} from './daily-report';
+export type SnapshotRef={date:string;generatedAt:string;version:string;origin:'main'|'archive'};
+export type BrowseItem={key:string;title:string;rank:number;heat:number|null;heatText?:string;sources:string[];analysisModel?:string};
+export type HourlyBrowseResult={snapshots:SnapshotRef[];snapshot:SnapshotRef|null;items:BrowseItem[];total:number;page:number;limit:number;kind:'topics'|'raw';sources:Array<{id:string;name:string}>};
+export type ItemDetail={snapshot:SnapshotRef;kind:'topics'|'raw';key:string;item:TopicGroup|RawHotItem;analysis?:TopicAnalysis;linkedTopicKey?:string};
+export type TrendPoint={snapshotDate:string;generatedAt:string;version:string;itemKey?:string;heatScore:number|null;rank:number|null;sourceCount:number|null;status:'matched'|'unmatched'|'ambiguous'};
+export type TopicTrend={title:string;date:string;days:number;points:TrendPoint[]};
+export type DailyBrowseResult={report:WccatDailyReport|null;version:SnapshotRef|null};

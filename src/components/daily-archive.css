@@ -1,1 +1,2 @@
 .daily-archive-form{display:grid;gap:8px;margin:12px 0 16px}.daily-archive-form label{font-size:12px;color:var(--muted)}.daily-archive-form select,.daily-archive-form input,.daily-archive-form button{max-width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel-strong);color:var(--text);font:inherit;color-scheme:dark}
+.daily-collection-note{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.6}

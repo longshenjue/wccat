@@ -1,17 +1,17 @@
-import {readDailyReportFromDb,readRecentSnapshotsFromDb} from './db';
+import {readDailyReportFromDb} from './db';
 import {getChinaSnapshotId} from './date';
-import {getDailyReportWindow,parseDailyReportDate,selectDailySnapshots} from './daily-window';
+import {parseDailyReportDate} from './daily-window';
+import {readDailyReportInput} from './daily-report-input';
 
 export function dailyGenerationPreview(value:unknown,now=new Date()) {
- const cutoff=parseDailyReportDate(value,now);
- const {start,end,reportDate}=getDailyReportWindow(cutoff);
- const snapshots=selectDailySnapshots(readRecentSnapshotsFromDb(25,getChinaSnapshotId(end)),end);
+ const cutoff=parseDailyReportDate(value);
+ const {start,end,reportDate,snapshots,collection}=readDailyReportInput(cutoff,now);
  const existing=readDailyReportFromDb(reportDate);
  return {
   reportDate,windowStart:getChinaSnapshotId(start),windowEnd:getChinaSnapshotId(end),
   snapshotCount:snapshots.length,hasTopics:snapshots.some(snapshot=>snapshot.topics.length>0),
   existing:Boolean(existing),existingGeneratedAt:existing?.generatedAt,
-  firstCollectedAt:snapshots[0]?.generatedAt,lastCollectedAt:snapshots.at(-1)?.generatedAt
+  ...collection
  };
 }
 

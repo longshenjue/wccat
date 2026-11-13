@@ -3,13 +3,12 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {report,snapshot,testDatabase} from './helpers/data-fixtures';
 
-test('manual report dates reject invalid and unfinished windows without shifting the requested day', async () => {
+test('manual report dates reject invalid dates and allow future windows without shifting the requested day', async () => {
  const {parseDailyReportDate} = await import('../src/lib/daily-window');
- const now=new Date('2026-11-13T01:59:59+08:00');
- for(const value of [undefined,'2026-02-30','2026-11-13','2026-11-14','2026-11-12; rm -rf /'])
-  assert.throws(()=>parseDailyReportDate(value,now),/日期|02:00/);
- assert.equal(parseDailyReportDate('2026-11-12',now).toISOString(),'2026-11-11T18:00:00.000Z');
- assert.equal(parseDailyReportDate('2026-11-13',new Date('2026-11-13T02:00:00+08:00')).toISOString(),'2026-11-12T18:00:00.000Z');
+ for(const value of [undefined,'2026-02-30','2026-11-12; rm -rf /'])
+  assert.throws(()=>parseDailyReportDate(value),/日期/);
+ assert.equal(parseDailyReportDate('2026-11-12').toISOString(),'2026-11-11T18:00:00.000Z');
+ assert.equal(parseDailyReportDate('2099-11-13').toISOString(),'2099-11-12T18:00:00.000Z');
 });
 
 test('daily admin jobs overwrite populated reports, expose partial translation failure, and protect empty history', async () => {
