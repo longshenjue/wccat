@@ -41,7 +41,7 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
           </Link>
         </nav>
 
-        <section className="nav-card">
+        <section className="nav-card daily-archive-nav">
           <span className="nav-title">Daily Archive</span>
           {months.length > 0 ? <form action="/daily" className="daily-archive-form"><label htmlFor="daily-archive-month">按月份查看</label><select id="daily-archive-month" name="month" defaultValue={selectedMonth}>{months.map(value=><option key={value} value={value}>{value}</option>)}</select><button type="submit">查看月份</button></form> : null}
           {dates.length > 0 ? (

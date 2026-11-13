@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {getChinaDate} from '@/lib/date';
+import {getDailyReportWindow} from '@/lib/daily-window';
 import type {AdminJob} from '@/lib/admin-jobs';
 import type {DataSummary} from '@/lib/admin-data-stats';
 import type {CleanupPreview} from '@/lib/data-preview';
@@ -25,7 +26,7 @@ export function AdminDataPanel(){
  const {params,change}=useAdminQuery();
  const tabs=[['overview','概览'],['hourly','小时报'],['daily','日报'],['storage','归档与存储'],['tasks','任务日志']];
  const tab=tabs.some(([key])=>key===params.get('tab'))?params.get('tab')!:'overview';
- const dailyDate=params.get('dDate')??today;
+ const dailyDate=params.get('dDate')??getDailyReportWindow().reportDate;
  const [authenticated,setAuthenticated]=useState<boolean|null>(null),[configured,setConfigured]=useState(true);
  const [password,setPassword]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
  const [summary,setSummary]=useState<DataSummary|null>(null),[jobs,setJobs]=useState<AdminJob[]>([]);
@@ -111,7 +112,7 @@ export function AdminDataPanel(){
   </>:null}
   {tab==='tasks'?<section className="data-card"><h2>任务与下载</h2><p className="data-muted">后台任务独立运行，关闭此页面后仍会继续。临时文件在确认清理后移除；超过24小时的旧文件将在下一次导出时回收。</p><div className="data-jobs">
    {jobs.map(job=><article className="data-job" key={job.id}><header><strong>{kinds[job.kind]}</strong><span className={'data-badge '+job.status}>{statuses[job.status]??job.status}</span><time>{new Date(job.createdAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</time></header>{job.input.range?<p>{job.input.range.start} 至 {job.input.range.end}</p>:null}<p className="data-muted">{job.progress}</p>{job.error?<p role="status" className="data-error">{job.error}</p>:null}
-    {job.kind==='daily'?<><p>日报日期：{job.input.reportDate} · 北京时间 02:00 截止</p>{job.result.daily?<div><p>话题 {job.result.daily.topicCount} 个 · 稿件模型 {job.result.daily.model} · TOP1 分析 {job.result.daily.analysisModel} · 英文{job.result.daily.englishReady?'已就绪':'未就绪'}</p><Link className="data-download" href={'/daily?date='+encodeURIComponent(job.result.daily.reportDate)}>查看该日日报 ↗</Link></div>:null}<AdminJobLog id={job.id} status={job.status} defaultOpen={job.status==='queued'||job.status==='running'||jobs.find(item=>item.kind==='daily')?.id===job.id}/></>:null}
+    {job.kind==='daily'?<><p>日报所属日期：{job.input.reportDate}</p>{job.result.daily?<div><p>话题 {job.result.daily.topicCount} 个 · 稿件模型 {job.result.daily.model} · TOP1 分析 {job.result.daily.analysisModel} · 英文{job.result.daily.englishReady?'已就绪':'未就绪'}</p><Link className="data-download" href={'/daily?date='+encodeURIComponent(job.result.daily.reportDate)}>查看该日日报 ↗</Link></div>:null}<AdminJobLog id={job.id} status={job.status} defaultOpen={job.status==='queued'||job.status==='running'||jobs.find(item=>item.kind==='daily')?.id===job.id}/></>:null}
     {job.kind==='export'&&job.result.files?.map(file=><div className="data-file" key={file.id}><b>{file.meta.month} · {file.meta.mode==='full'?'完整归档':'仅日报'}</b><small>{file.name}</small><code>SHA-256: {file.sha256}</code>{job.status==='ready'?<a className="data-download" href={'/api/admin/data?download='+job.id+'&file='+file.id} download>{file.downloaded?'再次下载':'下载文件'}</a>:null}</div>)}
     {job.kind==='export'&&job.status==='ready'?<div className="data-actions">{job.input.mode==='full'?<button className="data-danger" disabled={disabled||!job.result.files?.every(file=>file.downloaded)} onClick={()=>confirmCleanup(job.input.previewId!,job.id)}>已保存文件，清理对应小时数据</button>:null}<button disabled={disabled} onClick={()=>openConfirm({title:'移除服务器临时归档',phrase:'移除临时归档',body:{action:'discard',id:job.id},download:false})}>移除临时下载文件</button></div>:null}
     {job.result.cleanup?<p className={job.result.cleanup.reclaimed?'data-success':'data-warning'}>已删除 {job.result.cleanup.deleted.snapshots} 个小时快照；日报保留。{job.result.cleanup.reclaimed?'实际回收主库及WAL约 '+bytes(job.result.cleanup.reclaimedBytes):job.result.cleanup.reclaimError+' 可使用上方“回收空闲空间”重试。'}</p>:null}

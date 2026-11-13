@@ -1,17 +1,20 @@
 import { getChinaDate } from './date';
 
+/** A report's content date D ends at 02:00 Beijing on D+1. */
 export function parseDailyReportDate(value: unknown) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('日报日期无效。');
   const cutoff = new Date(`${value}T02:00:00+08:00`);
   if (!Number.isFinite(cutoff.getTime()) || getChinaDate(cutoff) !== value) throw new Error('日报日期无效。');
+  cutoff.setUTCDate(cutoff.getUTCDate() + 1);
   return cutoff;
 }
 
-/** Latest completed 02:00 Beijing cutoff, also used by manual daily generation. */
+/** Latest completed window, named for its starting (content) date. */
 export function getDailyReportWindow(now = new Date()) {
   const end = new Date(`${getChinaDate(now)}T02:00:00+08:00`);
   if (end.getTime() > now.getTime()) end.setUTCDate(end.getUTCDate() - 1);
-  return { start: new Date(end.getTime() - 86400000), end, reportDate: getChinaDate(end) };
+  const start = new Date(end.getTime() - 86400000);
+  return { start, end, reportDate: getChinaDate(start) };
 }
 
 /** Actual collection times in (start, end]; adjacent reports never double-count a boundary. */

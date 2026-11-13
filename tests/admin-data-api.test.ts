@@ -30,13 +30,17 @@ test('all management resources require login and same-origin deliberate mutation
   assert.equal(payload.summary.months[0].snapshots,1);
   assert.equal(payload.summary.months[0].reports,1);
   assert.equal((ctx.getDb().prepare('select count(*) as n from snapshots').get() as {n:number}).n,1);
-  const preview=await GET(new Request('https://example.test/api/admin/data?daily=2025-09-02',{headers:{cookie}}));
+  const preview=await GET(new Request('https://example.test/api/admin/data?daily=2025-09-01',{headers:{cookie}}));
   assert.equal(preview.status,200);
-  assert.equal((await preview.json()).preview.snapshotCount,1);
+  const window=(await preview.json()).preview;
+  assert.equal(window.snapshotCount,1);
+  assert.equal(window.reportDate,'2025-09-01');
+  assert.equal(window.windowStart,'2025-09-01-02');
+  assert.equal(window.windowEnd,'2025-09-02-02');
   assert.equal((await POST(request({action:'daily',reportDate:'2099-01-01'}))).status,400);
   assert.equal((await GET(new Request('https://example.test/api/admin/data?daily=2026-02-30',{headers:{cookie}}))).status,400);
   ctx.saveTopicAnalysisToDb('2025-09-01-08','topic-one',report('2025-09-01').topics[0].aiAnalysis!);
-  const created=await POST(request({action:'daily',reportDate:'2025-09-02'}));
+  const created=await POST(request({action:'daily',reportDate:'2025-09-01'}));
   assert.equal(created.status,202);
   const id=(await created.json()).job.id;
   const {getJob}=await import('../src/lib/admin-jobs');
@@ -45,6 +49,7 @@ test('all management resources require login and same-origin deliberate mutation
    await new Promise(resolve=>setTimeout(resolve,30)); job=getJob(id);
   }
   assert.equal(job.status,'partial',job.error??undefined);
+  assert.equal(job.result.daily?.reportDate,'2025-09-01');
   const logResponse=await GET(new Request('https://example.test/api/admin/data?logs='+id,{headers:{cookie}}));
   assert.equal(logResponse.status,200);
   assert.ok((await logResponse.json()).entries.length>0);

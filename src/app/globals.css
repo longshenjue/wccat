@@ -720,16 +720,19 @@ body {
 
 .brand-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px;
   border-radius: 22px;
 }
 
 .brand-card h1 {
   color: var(--text);
-  font-size: 2rem;
+  font-size: 1.85rem;
+  line-height: 1;
   letter-spacing: -0.08em;
+  white-space: nowrap;
 }
 
 .brand-logo {
@@ -773,8 +776,8 @@ body {
 .source-link {
   position: relative;
   display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 10px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 8px;
   min-height: 50px;
   padding: 8px;
   color: var(--text);
@@ -807,8 +810,8 @@ body {
   position: relative;
   z-index: 1;
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   color: #fff;
   font-weight: 900;
   place-items: center;
@@ -821,7 +824,9 @@ body {
   position: relative;
   z-index: 1;
   display: grid;
+  min-width: 0;
   gap: 2px;
+  overflow-wrap: anywhere;
 }
 
 .source-copy b {
@@ -2049,7 +2054,7 @@ body::after {
 /* Wider analysis layout */
 @media (min-width: 1320px) {
   .shell {
-    grid-template-columns: 220px minmax(560px, 1fr) minmax(520px, 34vw);
+    grid-template-columns: 190px minmax(0, 1fr) minmax(520px, 34vw);
     gap: 14px;
   }
 
@@ -2097,7 +2102,7 @@ body::after {
 
 @media (min-width: 1600px) {
   .shell {
-    grid-template-columns: 230px minmax(620px, 1fr) minmax(600px, 36vw);
+    grid-template-columns: 190px minmax(0, 1fr) minmax(600px, 36vw);
   }
 
   .right-panel {
@@ -2105,9 +2110,15 @@ body::after {
   }
 }
 
-@media (max-width: 1319px) {
+@media (min-width: 1181px) and (max-width: 1319px) {
   .shell {
-    grid-template-columns: 220px minmax(0, 1fr) 430px;
+    grid-template-columns: 190px minmax(0, 1fr) 430px;
+  }
+}
+
+@media (min-width: 821px) and (max-width: 1180px) {
+  .shell {
+    grid-template-columns: 190px minmax(0, 1fr);
   }
 }
 
@@ -2964,4 +2975,124 @@ body::after {
   .daily-shell .daily-topic-card { grid-template-columns:30px minmax(0,1fr); gap:10px; }
   .daily-shell .daily-topic-card .score-badge { grid-column:2; height:32px; width:64px; border-radius:10px; }
   .daily-shell .date-card { flex-wrap:wrap; gap:8px; }
+}
+
+/* Public pages: compact navigation and one document scroll on portrait screens. */
+.shell > .left-rail {
+  min-width: 0;
+}
+
+@media (max-width: 820px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    padding: 12px;
+  }
+
+  .shell > .left-rail,
+  .shell.daily-shell > .left-rail,
+  .shell > .content,
+  .shell > .right-panel {
+    position: static;
+    min-width: 0;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .shell .brand-card {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .shell .nav-card {
+    margin-top: 10px;
+    padding: 10px;
+  }
+
+  .shell nav[aria-label="模式"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .shell nav[aria-label="模式"] .nav-title {
+    grid-column: 1 / -1;
+  }
+
+  .shell .source-nav {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .shell .source-nav .nav-title {
+    align-self: center;
+    flex: 0 0 auto;
+  }
+
+  .shell .source-nav .source-link {
+    flex: 0 0 148px;
+    min-height: 54px;
+  }
+
+  .shell .snapshot-archive {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+  }
+
+  .shell .snapshot-archive > * {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .shell .daily-archive-nav {
+    max-height: 210px;
+    overflow-y: auto;
+  }
+
+  .shell .editorial-header {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px;
+    gap: 16px;
+  }
+
+  .shell .header-facts,
+  .shell .header-copy,
+  .shell .topic-body {
+    min-width: 0;
+  }
+
+  .shell .date-card {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .shell .fact-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .shell .topic-card {
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .shell .topic-title-row {
+    flex-wrap: wrap;
+  }
+
+  .shell .insight-card.battle-card {
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .shell .daily-draft-actions {
+    opacity: 1;
+    transform: none;
+  }
 }

@@ -78,7 +78,7 @@ export default async function Home({ searchParams }: PageProps) {
           </Link>
         </nav>
 
-        <nav className="nav-card" aria-label="来源">
+        <nav className="nav-card source-nav" aria-label="来源">
           <span className="nav-title">Sources</span>
           <a
             className={!selectedSource ? "active nav-link source-link source-all" : "nav-link source-link source-all"}
@@ -109,7 +109,7 @@ export default async function Home({ searchParams }: PageProps) {
           ))}
         </nav>
 
-        <section className="nav-card">
+        <section className="nav-card snapshot-archive">
           <span className="nav-title">Archive</span>
           {[selectedDate, ...dates.filter((date) => date !== selectedDate)].slice(0, 8).map((date) => (
             <a className={date === selectedDate ? "active nav-link" : "nav-link"} href={`/?date=${date}`} key={date}>

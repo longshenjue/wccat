@@ -94,6 +94,7 @@ existing valid translation without another AI call.
 Asia/Shanghai (six scheduled refreshes per day); it generates the daily
 report at 02:00 Asia/Shanghai, covering the preceding 02:00–02:00 window.
 Manual `npm run daily` also uses the latest completed 02:00 cutoff, not a rolling window.
+Reports are dated by the content day: the November 13 report covers November 13 02:00 through November 14 02:00 and is generated at November 14 02:00 (Asia/Shanghai).
 Daily topic persistence is shown as sample counts, not elapsed hours. Keep the worker running in a separate terminal.
 Restarts still trigger one immediate refresh; manual refresh/analyze commands
 remain explicit operations. English share output validation can request one

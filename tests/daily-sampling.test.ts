@@ -46,7 +46,7 @@ test('daily persistence handles four-hour samples and legacy hourly samples with
   db.saveSnapshotToDb(snapshot('2026-11-13-14', '2026-11-13T06:00:00Z'));
   const { generateDailyReport } = await import('../src/lib/daily-report');
   const daily = await generateDailyReport(new Date('2026-11-13T15:00:00+08:00'));
-  assert.equal(daily.reportDate, '2026-11-13');
+  assert.equal(daily.reportDate, '2026-11-12');
   assert.equal(daily.windowStart, '2026-11-12-02');
   assert.equal(daily.windowEnd, '2026-11-13-02');
   assert.equal(daily.topics[0].sampleCount, 25);

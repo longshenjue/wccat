@@ -7,8 +7,8 @@ test('manual report dates reject invalid dates and allow future windows without 
  const {parseDailyReportDate} = await import('../src/lib/daily-window');
  for(const value of [undefined,'2026-02-30','2026-11-12; rm -rf /'])
   assert.throws(()=>parseDailyReportDate(value),/日期/);
- assert.equal(parseDailyReportDate('2026-11-12').toISOString(),'2026-11-11T18:00:00.000Z');
- assert.equal(parseDailyReportDate('2099-11-13').toISOString(),'2099-11-12T18:00:00.000Z');
+ assert.equal(parseDailyReportDate('2026-11-12').toISOString(),'2026-11-12T18:00:00.000Z');
+ assert.equal(parseDailyReportDate('2099-11-13').toISOString(),'2099-11-13T18:00:00.000Z');
 });
 
 test('daily admin jobs overwrite populated reports, expose partial translation failure, and protect empty history', async () => {
@@ -37,10 +37,12 @@ test('daily admin jobs overwrite populated reports, expose partial translation f
   assert.equal((await runJob(emptyId)).status,'failed');
   assert.deepEqual(db.readDailyReportFromDb('2025-11-13'),original);
   assert.equal(calls,0);
-  db.saveSnapshotToDb(snapshot('2025-11-12-20','2025-11-12T12:00:00Z'));
-  db.saveTopicAnalysisToDb('2025-11-12-20','topic-one',original.topics[0].aiAnalysis!);
+  db.saveSnapshotToDb(snapshot('2025-11-13-20','2025-11-13T12:00:00Z'));
+  db.saveTopicAnalysisToDb('2025-11-13-20','topic-one',original.topics[0].aiAnalysis!);
   const preview=dailyGenerationPreview('2025-11-13');
   assert.equal(preview.snapshotCount,1);
+  assert.equal(preview.windowStart,'2025-11-13-02');
+  assert.equal(preview.windowEnd,'2025-11-14-02');
   assert.equal(preview.existing,true);
   const id=seedJob();
   const finished=await runJob(id);
@@ -99,7 +101,7 @@ test('daily admin jobs overwrite populated reports, expose partial translation f
   console.warn=(...parts:unknown[])=>{warnings.push(parts.join(' '));};
   try {
    const {generateDailyReport}=await import('../src/lib/daily-report');
-   await generateDailyReport(new Date('2025-11-13T02:00:00+08:00'));
+   await generateDailyReport(new Date('2025-11-14T02:00:00+08:00'));
    assert.match(warnings.join('\n'),/401/);
    assert.doesNotMatch(warnings.join('\n'),/test-only-daily-secret/);
   } finally {console.warn=oldWarn;}

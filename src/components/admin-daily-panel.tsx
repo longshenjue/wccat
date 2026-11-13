@@ -1,11 +1,11 @@
 "use client";
 
 import {useEffect,useState} from 'react';
-import {getChinaDate} from '@/lib/date';
+import {getDailyReportWindow} from '@/lib/daily-window';
 import type {DailyGenerationPreview} from '@/lib/admin-daily';
 
 export function AdminDailyPanel({disabled,revision,onGenerate,date:externalDate,onDateChange}:{disabled:boolean;revision:string;onGenerate:(date:string)=>Promise<boolean>;date?:string;onDateChange?:(date:string)=>void}) {
- const [localDate,setLocalDate]=useState(getChinaDate());
+ const [localDate,setLocalDate]=useState(()=>getDailyReportWindow().reportDate);
  const date=externalDate??localDate;
  const setDate=onDateChange??setLocalDate;
  const [view,setView]=useState<{key:string;preview?:DailyGenerationPreview;error?:string}>({key:''});
@@ -22,9 +22,9 @@ export function AdminDailyPanel({disabled,revision,onGenerate,date:externalDate,
  },[date,key]);
  const format=(value:string)=>value.slice(0,10)+' '+value.slice(11)+':00';
  return <section className="data-card data-daily-panel" aria-labelledby="manual-daily-heading">
-  <div><p className="eyebrow">DAILY REPORT</p><h2 id="manual-daily-heading">手动生成日报</h2><p className="data-muted">选择日期后，汇总前一天 02:00 至当天 02:00 的采样。任务后台运行，日志会持续更新。</p></div>
+  <div><p className="eyebrow">DAILY REPORT</p><h2 id="manual-daily-heading">手动生成日报</h2><p className="data-muted">日报日期代表内容所属日，汇总所选日 02:00 至次日 02:00 的采样，次日凌晨 02:00 自动生成。任务后台运行，日志会持续更新。</p></div>
   <form onSubmit={event=>{event.preventDefault();if(!disabled&&preview?.hasTopics)void onGenerate(date);}}>
-   <label htmlFor="daily-report-date">日报日期 · 北京时间<input id="daily-report-date" type="date" value={date} required onChange={event=>setDate(event.target.value)}/></label>
+   <label htmlFor="daily-report-date">日报所属日期 · 北京时间<input id="daily-report-date" type="date" value={date} required onChange={event=>setDate(event.target.value)}/></label>
    {loading?<p role="status">正在检查统计窗口与历史数据…</p>:view.error?<p role="alert" className="data-error">{view.error}</p>:preview?<div className="data-daily-preview">
     <p><b>统计窗口</b><br/>{format(preview.windowStart)} → {format(preview.windowEnd)} <small>UTC+8</small></p>
     <p>可用采样 <b>{preview.snapshotCount}</b> 次 · {preview.existing?'已有日报，将直接覆盖':'尚无日报，将创建新日报'}</p>
