@@ -20,7 +20,7 @@ test('registered archives deduplicate, span months and preserve newer main repor
   assert.equal(ctx.readSnapshotFromDb('2026-09-30-23')?.date,'2026-09-30-23');
   assert.deepEqual(ctx.readRecentSnapshotsFromDb(2,'2026-10-01-00').map(x=>x.date),['2026-09-30-23','2026-10-01-00']);
   assert.equal(ctx.readDailyReportFromDb('2026-09-30')?.wechatDraft,old.wechatDraft);
-  const newer={...old,generatedAt:'2026-11-13T00:00:00Z',shareEnglish:{headline:'New English',overview:'New overview',topics:[]}};
+  const newer={...old,generatedAt:'2026-11-13T00:00:00Z',shareEnglish:{...old.shareEnglish!,headline:'New English',overview:'New overview'}};
   ctx.saveDailyReportToDb(newer);
   assert.deepEqual(ctx.readDailyReportFromDb('2026-09-30'),newer);
   for(let month=1;month<=12;month++){
