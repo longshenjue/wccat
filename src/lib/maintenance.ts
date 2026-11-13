@@ -10,6 +10,7 @@ export function ensureMaintenanceSchema(db:Database.Database){
  insert or ignore into maintenance_state(id) values(1);
  create table if not exists admin_jobs(id text primary key,kind text not null,status text not null,input text not null,result text,error text,progress text,pid integer,host text,created_at integer not null,updated_at integer not null,cancelled integer not null default 0);
  create table if not exists admin_previews(id text primary key,payload text not null,created_at integer not null);
+ create table if not exists admin_job_logs(job_id text primary key references admin_jobs(id) on delete cascade,payload text not null,truncated integer not null default 0,updated_at integer not null);
  create table if not exists cleared_hours(date text primary key,cleared_at text not null);
  `);
  for(const table of ['maintenance_state','admin_jobs']){

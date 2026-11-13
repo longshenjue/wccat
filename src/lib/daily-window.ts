@@ -1,5 +1,13 @@
 import { getChinaDate } from './date';
 
+export function parseDailyReportDate(value: unknown, now = new Date()) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('日报日期无效。');
+  const cutoff = new Date(`${value}T02:00:00+08:00`);
+  if (!Number.isFinite(cutoff.getTime()) || getChinaDate(cutoff) !== value) throw new Error('日报日期无效。');
+  if (cutoff.getTime() > now.getTime()) throw new Error('该日期的 02:00 统计窗口尚未结束。');
+  return cutoff;
+}
+
 /** Latest completed 02:00 Beijing cutoff, also used by manual daily generation. */
 export function getDailyReportWindow(now = new Date()) {
   const end = new Date(`${getChinaDate(now)}T02:00:00+08:00`);

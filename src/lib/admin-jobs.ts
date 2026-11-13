@@ -12,9 +12,13 @@ import {exportMonth,type ArchiveFile} from './archive-export';
 import {cleanupData,maintainStorage,storageUsage} from './data-cleanup';
 import {fileSha256} from './archive-format';
 import {processAlive,processStamp} from './maintenance';
+import {requireDailyGenerationData} from './admin-daily';
+import {parseDailyReportDate} from './daily-window';
+import {generateDailyReport} from './daily-report';
+import {appendJobLog,redactJobMessage} from './admin-job-logs';
 
-export type JobInput={kind:'preview'|'export'|'cleanup'|'prepare'|'reclaim';range?:DateRange;mode?:ExportMode;previewId?:string;exportJobId?:string;ackDownloaded?:boolean;discardHourly?:boolean;ackMissingReports?:boolean};
-export type JobResult={preview?:CleanupPreview;previewId?:string;files?:ArchiveFile[];cleanup?:Awaited<ReturnType<typeof cleanupData>>;storage?:Awaited<ReturnType<typeof maintainStorage>>};
+export type JobInput={kind:'preview'|'export'|'cleanup'|'prepare'|'reclaim'|'daily';reportDate?:string;range?:DateRange;mode?:ExportMode;previewId?:string;exportJobId?:string;ackDownloaded?:boolean;discardHourly?:boolean;ackMissingReports?:boolean};
+export type JobResult={daily?:{reportDate:string;topicCount:number;model:string;analysisModel:string;englishReady:boolean;warnings:number};preview?:CleanupPreview;previewId?:string;files?:ArchiveFile[];cleanup?:Awaited<ReturnType<typeof cleanupData>>;storage?:Awaited<ReturnType<typeof maintainStorage>>};
 export type AdminJob={id:string;kind:JobInput['kind'];status:string;input:JobInput;result:JobResult;error:string|null;progress:string;pid:number|null;host:string|null;createdAt:number;updatedAt:number;cancelled:boolean};
 type JobRow={id:string;kind:JobInput['kind'];status:string;input:string;result:string|null;error:string|null;progress:string|null;pid:number|null;host:string|null;process_stamp:string|null;created_at:number;updated_at:number;cancelled:number};
 const idPattern=/^[a-f0-9-]{36}$/;
@@ -57,7 +61,8 @@ function verifyProof(input:JobInput,preview:CleanupPreview){
  return [];
 }
 export function createJob(input:JobInput):AdminJob{
- if(!['preview','export','cleanup','prepare','reclaim'].includes(input.kind))throw new Error('任务类型无效。');
+ if(!['preview','export','cleanup','prepare','reclaim','daily'].includes(input.kind))throw new Error('任务类型无效。');
+ if(input.kind==='daily')input={kind:'daily',reportDate:requireDailyGenerationData(input.reportDate).reportDate};
  if(input.kind==='preview'||input.kind==='export')input={...input,range:parseRange(input.range)};
  if(input.kind==='export'&&!['full','daily'].includes(input.mode??''))throw new Error('归档类型无效。');
  if(input.kind==='cleanup')verifyProof(input,previewById(input.previewId));
@@ -68,7 +73,7 @@ export function createJob(input:JobInput):AdminJob{
   getDb().prepare("insert into admin_jobs(id,kind,status,input,created_at,updated_at) values(?,?,'queued',?,?,?)").run(id,input.kind,JSON.stringify(input),now,now);
  }).immediate();
  try{
-  const child=spawn(process.execPath,['--import','tsx',resolve('scripts/admin-job.ts'),id],{cwd:process.cwd(),env:process.env,stdio:'ignore'});
+  const child=spawn(process.execPath,['--import','tsx',resolve('scripts/admin-job.ts'),id],{cwd:process.cwd(),env:process.env,stdio:input.kind==='daily'?'inherit':'ignore'});
   getDb().prepare("update admin_jobs set pid=?,host=?,process_stamp=? where id=? and status='queued'").run(child.pid??null,hostname(),child.pid?processStamp(child.pid):null,id);
   child.on('error',()=>getDb().prepare("update admin_jobs set status='failed',error=?,updated_at=? where id=?").run('无法启动后台任务进程。',Date.now(),id));
   child.unref();
@@ -80,7 +85,7 @@ export function createJob(input:JobInput):AdminJob{
 export function cancelJob(id:string){
  const job=getJob(id);
  if(!['queued','running'].includes(job.status))throw new Error('任务已结束。');
- if(job.kind!=='preview'&&job.kind!=='export')throw new Error('清理和空间回收开始后不能中断；请等待完成。');
+ if(job.kind!=='preview'&&job.kind!=='export')throw new Error('该任务开始后不能中断；请等待完成。');
  getDb().prepare('update admin_jobs set cancelled=1,updated_at=? where id=?').run(Date.now(),id);
 }
 export function markDownloaded(jobId:string,fileId:string){
@@ -122,7 +127,21 @@ export async function runJob(id:string){
  try{
   const input=job.input;let result:JobResult={};let status='complete';
   if(cancelled())throw new Error('任务已取消。');
-  if(input.kind==='preview'){
+  if(input.kind==='daily'){
+   let warnings=0;
+   const log=(level:'info'|'warn'|'error',text:string)=>{
+    const entry=appendJobLog(id,level,text);
+    if(level!=='info')warnings++;
+    progress(entry.message);
+    console[level](`[WcCAT][daily:${id}] ${entry.message}`);
+   };
+   log('info',`准备生成 ${input.reportDate} 日报；已有同日期日报将被覆盖`);
+   requireDailyGenerationData(input.reportDate);
+   const report=await generateDailyReport(parseDailyReportDate(input.reportDate),{requireData:true,log});
+   const analysisModel=report.topics[0]?.aiAnalysis?.model??'none';
+   result={daily:{reportDate:report.reportDate,topicCount:report.topics.length,model:report.model,analysisModel,englishReady:Boolean(report.shareEnglish),warnings}};
+   if(!report.shareEnglish||report.model.includes('local-template')||analysisModel==='none'||analysisModel==='local-rules')status='partial';
+  }else if(input.kind==='preview'){
    progress('正在统计所选范围、日报覆盖与数据版本');
    const source=new Database(dbPath,{readonly:true,fileMustExist:true});
    let preview:CleanupPreview;try{source.exec('begin');preview=previewCleanup(source,parseRange(input.range));source.exec('commit');}finally{source.close();}
@@ -156,10 +175,14 @@ export async function runJob(id:string){
   }else{
    result={storage:await maintainStorage(input.kind,progress)};
   }
-  getDb().prepare('update admin_jobs set status=?,result=?,progress=?,updated_at=? where id=?').run(status,JSON.stringify(result),'任务完成',Date.now(),id);
+  getDb().prepare('update admin_jobs set status=?,result=?,progress=?,updated_at=? where id=?').run(status,JSON.stringify(result),status==='partial'?'中文日报已生成；英文或部分 AI 内容未就绪，请查看日志':'任务完成',Date.now(),id);
  }catch(error){
   if(job.kind==='export')rmSync(jobExportDirectory(id),{recursive:true,force:true});
-  const message=error instanceof Error?error.message:'任务失败。';
+  const message=redactJobMessage(error instanceof Error?error.message:'任务失败。');
+  if(job.kind==='daily'){
+   appendJobLog(id,'error',message);
+   console.error(`[WcCAT][daily:${id}] ${message}`);
+  }
   getDb().prepare('update admin_jobs set status=?,error=?,updated_at=? where id=?').run(message.includes('取消')?'cancelled':'failed',message,Date.now(),id);
  }finally{job=getJob(id);}
  return job;

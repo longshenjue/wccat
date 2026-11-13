@@ -16,6 +16,7 @@ import type { DailyShareCopy } from "./daily-share-copy";
 import { sentimentLabel } from "./sentiment";
 import { analyzeTopicWithDeepSeek, type TopicAnalysis } from "./topic-analysis";
 import { fetchArticleContexts } from "./fulltext";
+import { redactJobMessage } from "./log-redaction";
 import type { DailySnapshot, Sentiment, TopicGroup, TopicOccurrence } from "./types";
 
 export type DailyReportTopic = {
@@ -79,24 +80,35 @@ type TopicBucket = {
 };
 
 type GeneratedDrafts = Pick<WccatDailyReport, "headline" | "overview" | "wechatDraft" | "videoScript" | "model">;
+export type GenerationLog = (level: "info" | "warn" | "error", message: string) => void;
 
-export async function generateDailyReport(inputDate = new Date()) {
+export async function generateDailyReport(inputDate = new Date(), options: {requireData?:boolean;log?:GenerationLog} = {}) {
+  const log:GenerationLog = options.log ?? ((level,message)=>console[level]('[WcCAT] '+redactJobMessage(message)));
   const generation = writeGeneration();
   const { start, end, reportDate } = getDailyReportWindow(inputDate);
+  log('info', `开始生成 ${reportDate} 日报，统计窗口 ${getChinaSnapshotId(start)}:00 → ${getChinaSnapshotId(end)}:00 UTC+8`);
   // A 24-hour window can overlap 25 hour-keyed buckets at its two boundaries.
   const snapshots = selectDailySnapshots(readRecentSnapshotsFromDb(25, getChinaSnapshotId(end)), end);
+  log('info', `已读取 ${snapshots.length} 次采样，正在汇总 Top10`);
   const topics = buildDailyTopTopics(snapshots).slice(0, 10);
+  if(options.requireData && (!snapshots.length || !topics.length)) throw new Error('该统计窗口没有有效快照或话题，已有日报保持不变。');
+  log('info', `Top10 汇总完成：${topics.length} 个话题`);
   const top = topics[0];
   if (top && (!top.aiAnalysis || top.aiAnalysis.model === "local-rules") && top.analysisSnapshotDate) {
     const snapshot = readSnapshotFromDb(top.analysisSnapshotDate);
     const original = snapshot?.topics.find((topic) => topic.id === top.analysisTopicId);
     if (original) {
-      top.aiAnalysis = await analyzeTopicWithDeepSeek(original, await fetchArticleContexts(original.occurrences));
+      log('info', '正在补充 TOP1 AI 分析');
+      top.aiAnalysis = await analyzeTopicWithDeepSeek(original, await fetchArticleContexts(original.occurrences),undefined,trace=>{
+        log(trace.status==='ok'?'info':'warn', `TOP1 AI ${trace.model} ${trace.status}，耗时 ${trace.durationMs}ms，fallback=${trace.usedFallback}${trace.error?`：${trace.error}`:''}`);
+      });
     }
   }
+  if(top) log(top.aiAnalysis && top.aiAnalysis.model!=='local-rules'?'info':'warn', `TOP1 分析来源：${top.aiAnalysis?.model ?? '无分析'}${top.aiAnalysis?.model==='local-rules'?'（本地规则回退）':''}`);
+  log('info', '正在生成中文日报稿件');
   const drafts = await generateDrafts(reportDate, snapshots, topics, {
     start: getChinaSnapshotId(start), end: getChinaSnapshotId(end)
-  });
+  },log);
   const report: WccatDailyReport = {
     reportDate,
     generatedAt: new Date().toISOString(),
@@ -107,8 +119,14 @@ export async function generateDailyReport(inputDate = new Date()) {
   };
 
   saveDailyReportToDb(report, generation);
-  report.shareEnglish = await translateDailyShare(report);
-  if (report.shareEnglish) saveDailyShareEnglishToDb(report, generation);
+  log('info', `中文日报已保存，稿件模型：${report.model}`);
+  log('info', '正在生成英文分享翻译');
+  report.shareEnglish = await translateDailyShare(report,log);
+  if (report.shareEnglish) {
+    if(!saveDailyShareEnglishToDb(report, generation)) throw new Error('英文保存失败：日报在翻译期间已改变，请重新生成。');
+    log('info', '英文分享内容已保存');
+  } else log('warn', '中文已生成，英文未就绪');
+  log('info', `日报生成结束：${reportDate}，${topics.length} 个话题`);
   return report;
 }
 
@@ -251,13 +269,15 @@ async function generateDrafts(
   reportDate: string,
   snapshots: DailySnapshot[],
   topics: DailyReportTopic[],
-  window: { start: string; end: string }
+  window: { start: string; end: string },
+  log: GenerationLog
 ): Promise<GeneratedDrafts> {
   const fallback = buildFallbackDrafts(reportDate, snapshots, topics);
   const apiKey = process.env.DEEPSEEK_API_KEY;
   const model = process.env.DEEPSEEK_MODEL ?? "deepseek-flash";
 
   if (!apiKey || topics.length === 0) {
+    log('warn', !apiKey?'未配置 DEEPSEEK_API_KEY，中文稿件使用 local-template 回退':'没有话题，中文稿件使用 local-template');
     return fallback;
   }
 
@@ -309,6 +329,7 @@ async function generateDrafts(
     });
 
     if (!response.ok) {
+      log('warn', `中文稿件 AI 请求 HTTP ${response.status}，使用 local-template 回退`);
       return fallback;
     }
 
@@ -317,18 +338,23 @@ async function generateDrafts(
     };
     const content = payload.choices?.[0]?.message?.content;
     if (!content) {
+      log('warn', '中文稿件 AI 返回空内容，使用 local-template 回退');
       return fallback;
     }
 
     const parsed = JSON.parse(content) as Partial<GeneratedDrafts>;
+    const draftFields = ['headline','overview','wechatDraft','videoScript'] as const;
+    const missingFields = draftFields.filter(field=>typeof parsed[field]!=='string'||!parsed[field]?.trim());
+    if(missingFields.length) log('warn', `中文 AI 稿件字段不完整，以下字段使用 local-template：${missingFields.join('、')}`);
     return {
       headline: textOr(parsed.headline, fallback.headline),
       overview: textOr(parsed.overview, fallback.overview),
       wechatDraft: textOr(parsed.wechatDraft, fallback.wechatDraft),
       videoScript: textOr(parsed.videoScript, fallback.videoScript),
-      model
+      model: missingFields.length===draftFields.length?'local-template':missingFields.length?`${model}+local-template`:model
     };
-  } catch {
+  } catch(error) {
+    log('warn', `中文稿件 AI 异常，使用 local-template 回退：${error instanceof Error?error.message:'未知错误'}`);
     return fallback;
   }
 }

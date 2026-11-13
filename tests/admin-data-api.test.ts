@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {testDatabase,snapshot,report} from './helpers/data-fixtures';
 test('all management resources require login and same-origin deliberate mutations',async()=>{
  const ctx=await testDatabase();
- const oldHash=process.env.WCCAT_ADMIN_PASSWORD_HASH,oldSecret=process.env.WCCAT_ADMIN_SESSION_SECRET;
+ const oldHash=process.env.WCCAT_ADMIN_PASSWORD_HASH,oldSecret=process.env.WCCAT_ADMIN_SESSION_SECRET,oldKey=process.env.DEEPSEEK_API_KEY;
+ process.env.DEEPSEEK_API_KEY='';
  try{
   const auth=await import('../src/lib/admin-auth');
   process.env.WCCAT_ADMIN_PASSWORD_HASH=auth.hashAdminPassword('test-only-admin-password');
@@ -11,10 +12,14 @@ test('all management resources require login and same-origin deliberate mutation
   const {GET,POST}=await import('../src/app/api/admin/data/route');
   ctx.saveSnapshotToDb(snapshot('2025-09-01-08'));ctx.saveDailyReportToDb(report('2025-09-01'));
   assert.equal((await GET(new Request('https://example.test/api/admin/data'))).status,401);
+  assert.equal((await GET(new Request('https://example.test/api/admin/data?daily=2025-09-02'))).status,401);
+  assert.equal((await GET(new Request('https://example.test/api/admin/data?logs=anything'))).status,401);
+  assert.equal((await POST(new Request('https://example.test/api/admin/data',{method:'POST',headers:{origin:'https://example.test','content-type':'application/json'},body:JSON.stringify({action:'daily',reportDate:'2025-09-02'})}))).status,401);
   assert.equal((await GET(new Request('https://example.test/api/admin/data?download=../../etc/passwd&file=anything'))).status,401);
   const cookie='wccat_admin='+auth.createAdminSession();
   const request=(body:unknown,origin='https://example.test')=>new Request('https://example.test/api/admin/data',{method:'POST',headers:{cookie,origin,'content-type':'application/json'},body:JSON.stringify(body)});
   assert.equal((await POST(request({action:'cleanup'},'https://evil.test'))).status,403);
+  assert.equal((await POST(request({action:'daily',reportDate:'2025-09-02'},'https://evil.test'))).status,403);
   assert.equal((await POST(request({action:'cleanup'}))).status,400);
   assert.equal((await POST(request({action:'preview',range:{start:'2026-02-30',end:'2026-03-01'}}))).status,400);
   assert.equal((await GET(new Request('https://example.test/api/admin/data?download=../../etc/passwd&file=anything',{headers:{cookie}}))).status,400);
@@ -25,9 +30,28 @@ test('all management resources require login and same-origin deliberate mutation
   assert.equal(payload.summary.months[0].snapshots,1);
   assert.equal(payload.summary.months[0].reports,1);
   assert.equal((ctx.getDb().prepare('select count(*) as n from snapshots').get() as {n:number}).n,1);
+  const preview=await GET(new Request('https://example.test/api/admin/data?daily=2025-09-02',{headers:{cookie}}));
+  assert.equal(preview.status,200);
+  assert.equal((await preview.json()).preview.snapshotCount,1);
+  assert.equal((await POST(request({action:'daily',reportDate:'2099-01-01'}))).status,400);
+  assert.equal((await GET(new Request('https://example.test/api/admin/data?daily=2026-02-30',{headers:{cookie}}))).status,400);
+  ctx.saveTopicAnalysisToDb('2025-09-01-08','topic-one',report('2025-09-01').topics[0].aiAnalysis!);
+  const created=await POST(request({action:'daily',reportDate:'2025-09-02'}));
+  assert.equal(created.status,202);
+  const id=(await created.json()).job.id;
+  const {getJob}=await import('../src/lib/admin-jobs');
+  let job=getJob(id);
+  for(let i=0;i<200&&['queued','running'].includes(job.status);i++){
+   await new Promise(resolve=>setTimeout(resolve,30)); job=getJob(id);
+  }
+  assert.equal(job.status,'partial',job.error??undefined);
+  const logResponse=await GET(new Request('https://example.test/api/admin/data?logs='+id,{headers:{cookie}}));
+  assert.equal(logResponse.status,200);
+  assert.ok((await logResponse.json()).entries.length>0);
  }finally{
   if(oldHash===undefined)delete process.env.WCCAT_ADMIN_PASSWORD_HASH;else process.env.WCCAT_ADMIN_PASSWORD_HASH=oldHash;
   if(oldSecret===undefined)delete process.env.WCCAT_ADMIN_SESSION_SECRET;else process.env.WCCAT_ADMIN_SESSION_SECRET=oldSecret;
+  if(oldKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=oldKey;
   ctx.close();
  }
 });

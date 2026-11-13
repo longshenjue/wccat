@@ -3,6 +3,8 @@ import {Readable} from 'node:stream';
 import {requireAdmin,readAdminJson,adminErrorResponse,AdminError} from '@/lib/admin-auth';
 import {dataSummary} from '@/lib/admin-data-stats';
 import {createJob,getJobs,cancelJob,discardExport,exportFile,markDownloaded,getCleanupPreview,type JobInput} from '@/lib/admin-jobs';
+import {dailyGenerationPreview} from '@/lib/admin-daily';
+import {readJobLogs} from '@/lib/admin-job-logs';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 const json=(body:unknown,status=200)=>Response.json(body,{status,headers:{'cache-control':'no-store'}});
@@ -11,6 +13,8 @@ export async function GET(request:Request){
  try{
   requireAdmin(request);
   const url=new URL(request.url);
+  if(url.searchParams.has('daily'))return json({preview:dailyGenerationPreview(url.searchParams.get('daily'))});
+  if(url.searchParams.has('logs'))return json(readJobLogs(url.searchParams.get('logs')!));
   if(url.searchParams.has('download')){
    const jobId=url.searchParams.get('download')!,fileId=url.searchParams.get('file')??'';
    const file=exportFile(jobId,fileId),stream=createReadStream(file.path);
@@ -35,10 +39,11 @@ export async function POST(request:Request){
    else{if(body.confirmation!=='移除临时归档')throw new AdminError('请确认移除临时归档。');discardExport(body.id);}
    return json({ok:true});
   }
-  if(!['preview','export','cleanup','prepare','reclaim'].includes(String(action)))throw new AdminError('操作无效。');
+  if(!['preview','export','cleanup','prepare','reclaim','daily'].includes(String(action)))throw new AdminError('操作无效。');
   if(action==='cleanup'&&body.confirmation!=='清理小时数据')throw new AdminError('请输入“清理小时数据”确认。');
   if(action==='prepare'&&body.confirmation!=='启用空间回收')throw new AdminError('请确认启用空间回收。');
   const input:JobInput={kind:action as JobInput['kind']};
+  if(action==='daily')input.reportDate=typeof body.reportDate==='string'?body.reportDate:undefined;
   if(action==='preview'||action==='export')input.range=body.range as JobInput['range'];
   if(action==='export')input.mode=body.mode as JobInput['mode'];
   for(const key of ['previewId','exportJobId'] as const)if(typeof body[key]==='string')input[key]=body[key];

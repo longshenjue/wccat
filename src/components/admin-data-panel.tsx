@@ -5,10 +5,12 @@ import {getChinaDate} from '@/lib/date';
 import type {AdminJob} from '@/lib/admin-jobs';
 import type {DataSummary} from '@/lib/admin-data-stats';
 import type {CleanupPreview} from '@/lib/data-preview';
+import {AdminDailyPanel} from './admin-daily-panel';
+import {AdminJobLog} from './admin-job-log';
 type Confirmation={title:string;phrase:string;body:Record<string,unknown>;preview?:CleanupPreview;download:boolean};
 const bytes=(n:number)=>n>=1024**3?(n/1024**3).toFixed(2)+' GiB':n>=1024**2?(n/1024**2).toFixed(1)+' MiB':(n/1024).toFixed(1)+' KiB';
-const statuses:Record<string,string>={queued:'等待执行',running:'正在执行',ready:'可下载',complete:'已完成',failed:'失败',cancelled:'已取消',expired:'临时文件已移除'};
-const kinds:Record<string,string>={preview:'清理预览',export:'归档下载',cleanup:'小时数据清理',prepare:'启用空间回收',reclaim:'回收空闲空间'};
+const statuses:Record<string,string>={queued:'等待执行',running:'正在执行',ready:'可下载',complete:'已完成',partial:'已生成 · 有警告',failed:'失败',cancelled:'已取消',expired:'临时文件已移除'};
+const kinds:Record<string,string>={preview:'清理预览',export:'归档下载',cleanup:'小时数据清理',prepare:'启用空间回收',reclaim:'回收空闲空间',daily:'手动生成日报'};
 async function api(path='',body?:Record<string,unknown>){
  const response=await fetch('/api/admin/'+path,{...(body?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{}),cache:'no-store'});
  const result=await response.json();
@@ -69,7 +71,7 @@ export function AdminDataPanel(){
  if(authenticated===null)return <main className="data-admin"><p role="status">正在检查管理员会话…</p></main>;
  if(!authenticated)return <main className="data-admin data-admin-login"><Link href="/daily" className="data-admin-back">← 返回日报</Link><section className="data-card"><p className="eyebrow">WcCAT · ADMIN</p><h1>数据管理</h1><p className="data-muted">管理员登录后，可以下载归档、清理小时历史并管理存储空间。</p>{configured?<form onSubmit={login}><label htmlFor="admin-password">管理员密码</label><input id="admin-password" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/><button disabled={busy} className="data-primary">{busy?'正在登录…':'登录管理后台'}</button></form>:<p>管理员入口尚未配置。请先按部署文档设置运行时管理员密码散列与会话密钥。</p>}{message?<p role="alert" className="data-error">{message}</p>:null}</section></main>;
  return <main className="data-admin">
-  <header className="data-admin-header"><div><p className="eyebrow">WcCAT · ADMIN</p><h1>数据归档与空间管理</h1><p className="data-muted">日报长期保留 · 小时数据按需处理 · 不自动到期删除</p></div><nav><Link href="/daily">查看日报 ↗</Link><button onClick={()=>loadSummary().catch(error=>setMessage(error.message))} disabled={busy}>刷新状态</button><button onClick={logout}>退出登录</button></nav></header>
+  <header className="data-admin-header"><div><p className="eyebrow">WcCAT · ADMIN</p><h1>日报与数据管理</h1><p className="data-muted">按日期生成日报 · 历史归档 · 存储空间管理</p></div><nav><Link href="/daily">查看日报 ↗</Link><button onClick={()=>loadSummary().catch(error=>setMessage(error.message))} disabled={busy}>刷新状态</button><button onClick={logout}>退出登录</button></nav></header>
   {message?<p className="data-error" role="alert">{message}</p>:null}
   {summary?<section className="data-stat-grid" aria-label="存储用量">
    <div className="data-card"><span>主数据库</span><strong>{bytes(summary.storage.databaseBytes)}</strong><small>WAL {bytes(summary.storage.walBytes)}</small></div>
@@ -77,6 +79,7 @@ export function AdminDataPanel(){
    <div className="data-card"><span>临时下载文件</span><strong>{bytes(summary.storage.exportsBytes)}</strong><small>下载清理后移除；可单独移除</small></div>
    <div className="data-card"><span>已注册历史归档</span><strong>{summary.archiveCount} 份</strong><small>占用 {bytes(summary.storage.archivesBytes)}</small></div>
   </section>:<p role="status">正在读取容量与月份统计…</p>}
+  <AdminDailyPanel disabled={disabled} revision={jobs.filter(job=>job.kind==='daily').map(job=>job.id+':'+job.status).join('|')} onGenerate={date=>submit({action:'daily',reportDate:date})}/>
   <div className="data-management-grid">
    <section className="data-card"><h2>选择数据范围</h2><p className="data-muted">日期均按北京时间计算，包含结束日期当天。最近48小时和最新小时记录不会被清理。</p><div className="data-range"><label>开始日期<input type="date" value={start} max={end} onChange={e=>setStart(e.target.value)}/></label><label>结束日期<input type="date" value={end} min={start} max={today} onChange={e=>setEnd(e.target.value)}/></label></div>
     <button disabled={disabled||!start||!end} onClick={()=>submit({action:'preview',range:{start,end}})} className="data-primary">生成范围预览</button>
@@ -90,6 +93,7 @@ export function AdminDataPanel(){
   <section className="data-card data-maintenance"><div><h2>空间回收</h2><p className="data-muted">{summary?.storage.incremental?'已启用增量回收。清理任务会自动归还空闲页面。':'旧数据库尚未启用增量回收。建议在数据较少时初始化，过程保留全部业务记录，并短暂暂停写入。'}</p><small>主库可复用空页 {summary?bytes(summary.storage.reusableBytes):'—'}；它们与已归还磁盘的空间不同。</small></div><div className="data-actions">{!summary?.storage.incremental?<button disabled={disabled} onClick={()=>openConfirm({title:'启用空间回收',phrase:'启用空间回收',body:{action:'prepare'},download:false})}>初始化空间回收</button>:null}<button disabled={disabled} onClick={()=>submit({action:'reclaim'})}>回收空闲空间</button></div></section>
   <section className="data-card"><h2>任务与下载</h2><p className="data-muted">后台任务独立运行，关闭此页面后仍会继续。临时文件在确认清理后移除；超过24小时的旧文件将在下一次导出时回收。</p><div className="data-jobs">
    {jobs.map(job=><article className="data-job" key={job.id}><header><strong>{kinds[job.kind]}</strong><span className={'data-badge '+job.status}>{statuses[job.status]??job.status}</span><time>{new Date(job.createdAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</time></header>{job.input.range?<p>{job.input.range.start} 至 {job.input.range.end}</p>:null}<p className="data-muted">{job.progress}</p>{job.error?<p role="status" className="data-error">{job.error}</p>:null}
+    {job.kind==='daily'?<><p>日报日期：{job.input.reportDate} · 北京时间 02:00 截止</p>{job.result.daily?<div><p>话题 {job.result.daily.topicCount} 个 · 稿件模型 {job.result.daily.model} · TOP1 分析 {job.result.daily.analysisModel} · 英文{job.result.daily.englishReady?'已就绪':'未就绪'}</p><Link className="data-download" href={'/daily?date='+encodeURIComponent(job.result.daily.reportDate)}>查看该日日报 ↗</Link></div>:null}<AdminJobLog id={job.id} status={job.status} defaultOpen={job.status==='queued'||job.status==='running'||jobs.find(item=>item.kind==='daily')?.id===job.id}/></>:null}
     {job.kind==='export'&&job.result.files?.map(file=><div className="data-file" key={file.id}><b>{file.meta.month} · {file.meta.mode==='full'?'完整归档':'仅日报'}</b><small>{file.name}</small><code>SHA-256: {file.sha256}</code>{job.status==='ready'?<a className="data-download" href={'/api/admin/data?download='+job.id+'&file='+file.id} download>{file.downloaded?'再次下载':'下载文件'}</a>:null}</div>)}
     {job.kind==='export'&&job.status==='ready'?<div className="data-actions">{job.input.mode==='full'?<button className="data-danger" disabled={disabled||!job.result.files?.every(file=>file.downloaded)} onClick={()=>confirmCleanup(job.input.previewId!,job.id)}>已保存文件，清理对应小时数据</button>:null}<button disabled={disabled} onClick={()=>openConfirm({title:'移除服务器临时归档',phrase:'移除临时归档',body:{action:'discard',id:job.id},download:false})}>移除临时下载文件</button></div>:null}
     {job.result.cleanup?<p className={job.result.cleanup.reclaimed?'data-success':'data-warning'}>已删除 {job.result.cleanup.deleted.snapshots} 个小时快照；日报保留。{job.result.cleanup.reclaimed?'实际回收主库及WAL约 '+bytes(job.result.cleanup.reclaimedBytes):job.result.cleanup.reclaimError+' 可使用上方“回收空闲空间”重试。'}</p>:null}
