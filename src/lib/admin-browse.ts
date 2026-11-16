@@ -1,3 +1,4 @@
+import {sharingReportForClient} from './shareen-image-state';
 import {getDb} from './db';
 import {normalizeTitle} from './normalize';
 import {resolveSnapshots,resolveReport,sourceDb,publicVersion,versionOf} from './snapshot-reader';
@@ -118,6 +119,6 @@ export function dailyBrowse(value:unknown):DailyBrowseResult {
   const date=browseDate(value),row=resolveReport(date);
   if(!row)return {report:null,version:null};
   const result=sourceDb(row.source).prepare('select payload from daily_reports where report_date=?').get(date) as {payload:string};
-  return {report:JSON.parse(result.payload),version:publicVersion(row)};
+  return {report:sharingReportForClient(JSON.parse(result.payload)),version:publicVersion(row)};
  }).deferred();
 }

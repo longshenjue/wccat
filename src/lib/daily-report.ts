@@ -11,6 +11,8 @@ import { readDailyReportInput } from "./daily-report-input";
 import { translateDailyShare } from "./daily-share-translation";
 import type { DailyShareCopy } from "./daily-share-copy";
 import type { ShareEnCopy } from "./shareen-types";
+import {savePreparedShareEnImages} from './sharing';
+import {restoreGeneratedImages} from './shareen-image-state';
 import {generateShareEn} from "./shareen";
 import {saveSharingFields} from "./shareen-persistence";
 import { sentimentLabel } from "./sentiment";
@@ -121,6 +123,7 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
     ...drafts
   };
 
+  const previous=readDailyReportFromDb(reportDate);
   saveDailyReportToDb(report, generation);
   log('info', `中文日报已保存，稿件模型：${report.model}`);
   log('info', '正在生成英文分享翻译');
@@ -133,9 +136,12 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
   log('info', '正在生成 ShareEn 海外分享卡片与 TOP3 英文配文');
   const shareEn=await generateShareEn(report,log);
   if(shareEn){
-    if(!saveSharingFields(report,{shareEn},generation))throw new Error('ShareEn 保存失败：日报在生成期间已改变，请重新生成。');
-    report.shareEn=shareEn;
-    log('info','ShareEn 文案已保存；请在管理员“分享制作”检查配图和排版后下载');
+    const withAssets=restoreGeneratedImages(report,shareEn,previous);
+    if(!saveSharingFields(report,{shareEn:withAssets},generation))throw new Error('ShareEn 保存失败：日报在生成期间已改变，请重新生成。');
+    report.shareEn=withAssets;
+    log('info','ShareEn 文案已保存，正在检查焦点配图');
+    const saved=await savePreparedShareEnImages(report,withAssets,generation,{log});
+    report.shareEn=saved.shareEn;
   }else log('warn','日报已保存，ShareEn 暂未就绪，可在管理员“分享制作”重新生成');
   log('info', `日报生成结束：${reportDate}，${topics.length} 个话题`);
   return report;

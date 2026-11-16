@@ -78,8 +78,11 @@ npm run daily
 
 Open `/admin` → 分享制作 to preview and download Chinese/English long images or the
 branded ShareEn multi-card ZIP. Public `/daily` is for reading only. Daily generation
-now attempts ShareEn automatically after the ordinary English translation; downloads
-and format/caption switches reuse saved content and never call AI.
+saves the ordinary English translation and ShareEn copy, then prepares up to three
+selected photos. Each photo uses a protected 1072×360 crop or a 400×480 full-image
+layout. The processed WebP files travel with the SQLite daily archive. In 分享制作,
+**补齐配图** prepares photos for older reports, and **重新处理配图** refreshes one
+selected photo. Previews and downloads reuse saved images without calling AI.
 
 ShareEn includes the original Top10, 2–3 overseas-relevant deep dives and branded
 English captions with numbered summaries of the original daily Top3. Failed

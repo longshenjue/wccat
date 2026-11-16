@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseAllowedImageUrl } from "@/lib/image-proxy";
+import { parseAllowedImageUrl, parseShareEnImageUrl } from "@/lib/image-proxy";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +34,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Missing image url" }, { status: 400 });
   }
 
+  const parseSourceUrl = searchParams.get("mode") === "shareen" ? parseShareEnImageUrl : parseAllowedImageUrl;
   let imageUrl: URL;
   try {
-    imageUrl = parseAllowedImageUrl(rawUrl);
+    imageUrl = parseSourceUrl(rawUrl);
   } catch {
     return NextResponse.json({ error: "Unapproved image url" }, { status: 400 });
   }
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
         await response.body?.cancel();
         if (!location) break;
         try {
-          imageUrl = parseAllowedImageUrl(new URL(location, imageUrl).toString());
+          imageUrl = parseSourceUrl(new URL(location, imageUrl).toString());
         } catch {
           return NextResponse.json({ error: "Unapproved image redirect" }, { status: 403 });
         }

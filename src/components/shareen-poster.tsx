@@ -4,7 +4,8 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { WccatDailyReport } from '@/lib/daily-report';
 import type { ShareEnBattle, ShareEnCopy } from '@/lib/shareen-types';
 import { fitShareEnCard } from '@/lib/share-export';
-import { shareEnImage } from '@/lib/shareen-media';
+import { shareEnImage, type ShareEnImage } from '@/lib/shareen-media';
+import { validateImageAsset, WIDE_IMAGE, SPLIT_IMAGE } from '@/lib/shareen-image-types';
 import { getShareEnBattle } from '@/lib/shareen-battle';
 
 export function shareEnCardIdentity(report: WccatDailyReport, copy: ShareEnCopy, index: number): string {
@@ -17,13 +18,18 @@ function Brand({footer=false}:{footer?:boolean}) {
  return <div className={footer?'shareen-brand shareen-brand-footer':'shareen-brand'}><strong><span>Wc</span><span>CAT</span></strong>{footer?<small>CHINA, IN CONTEXT.</small>:null}</div>;
 }
 
-function SourceImage({src,alt}:{src:string;alt:string}) {
- const [failed,setFailed]=useState(false);
- if(failed)return null;
- return <figure className="shareen-cover">
-  {/* eslint-disable-next-line @next/next/no-img-element -- Export requires a decoded same-origin image. */}
-  <img data-shareen-cover src={src} alt={alt} onError={()=>setFailed(true)}/>
- </figure>;
+function Story({image,text}:{image:ShareEnImage|undefined;text:string}) {
+ const [failedSrc,setFailedSrc]=useState('');
+ const visible=image&&failedSrc!==image.src?image:undefined;
+ const split=visible?.layout==='split';
+ const display=split?visible.display:undefined;
+ return <div className={`shareen-story${split?' shareen-story-split':''}`} style={display?{gridTemplateColumns:`${display.width}px minmax(0,1fr)`}:undefined}>
+  {visible?<figure className="shareen-cover" style={display?{width:display.width,height:display.height}:{width:WIDE_IMAGE.width,height:WIDE_IMAGE.height}}>
+   {/* eslint-disable-next-line @next/next/no-img-element -- Export requires a decoded same-origin image. */}
+   <img data-shareen-cover src={visible.src} alt={visible.alt} onError={()=>setFailedSrc(visible.src)} style={display?{width:SPLIT_IMAGE.width,height:SPLIT_IMAGE.height,transform:`translate(${-display.left}px, ${-display.top}px)`}:undefined}/>
+  </figure>:null}
+  <section className="shareen-explainer"><h2>WHAT HAPPENED</h2><p>{text}</p></section>
+ </div>;
 }
 
 function DebateStrip({battle}:{battle:ShareEnBattle}) {
@@ -38,7 +44,7 @@ function DebateStrip({battle}:{battle:ShareEnBattle}) {
  </section>;
 }
 
-/** Fixed-size preview and export share a two-line masthead and image-led focus layout. */
+/** Preview and export share a stacked brand/title/date header and safe cached image layouts. */
 export function ShareEnPoster({report,copy,index}:{report:WccatDailyReport;copy:ShareEnCopy;index:number}) {
  const highlight = index > 0 ? copy.highlights[index-1] : undefined;
  const topic = highlight ? report.topics.find(topic=>topic.id===highlight.topicId) : undefined;
@@ -47,15 +53,15 @@ export function ShareEnPoster({report,copy,index}:{report:WccatDailyReport;copy:
  const highlights = new Set(copy.highlights.map(item=>item.topicId));
  return <article className={`shareen-card ${index===0?'shareen-overview':'shareen-detail'}`} lang="en" data-shareen-index={index} aria-label={shareEnCardIdentity(report,copy,index)}>
   {index===0?<header className="shareen-overview-header" data-fit-zone>
-   <h1 className="shareen-masthead"><span className="shareen-masthead-brand"><span>Wc</span><span>CAT</span></span>{' '}<span>Daily Hot · China’s Top {copy.overview.topics.length}</span></h1>
+   <Brand/>
+   <h1 className="shareen-masthead">Daily Hot · China Top {copy.overview.topics.length}</h1>
    <p className="shareen-masthead-date">{report.reportDate}</p>
   </header>:<header className="shareen-card-header" data-fit-zone><Brand/><div className="shareen-edition"><b>{report.reportDate}</b><span>DAILY HOT / SHAREEN</span></div></header>}
   <div className="shareen-card-body" data-fit-zone>
    {highlight ? <>
     <div className="shareen-section-kicker"><span>A CLOSER LOOK</span><b>ORIGINAL RANK #{String(topic?.rank??'').padStart(2,'0')}</b></div>
     <h1>{highlight.hook}</h1>
-    {image?<SourceImage key={image.src} src={image.src} alt={image.alt}/>:null}
-    <section className="shareen-explainer"><h2>WHAT HAPPENED</h2><p>{highlight.whatHappened}</p></section>
+    <Story key={image?.src??'no-image'} image={image} text={highlight.whatHappened}/>
     {battle?<DebateStrip battle={battle}/>:null}
     <section className="shareen-explainer shareen-why"><h2>WHY IT MATTERS</h2><p>{highlight.whyItMatters}</p></section>
    </> : <>
@@ -91,11 +97,13 @@ export function ScaledPoster({width,height,children}:{width:number;height?:numbe
  return <div className="shareen-scaled-host" ref={host} style={{height:size.height*size.scale}}><div className="shareen-scaled-inner" ref={inner} style={{width,transform:`scale(${size.scale})`}}>{children}</div></div>;
 }
 
-export function ShareEnPreviewCard({report,copy,index,onDownload,disabled}:{report:WccatDailyReport;copy:ShareEnCopy;index:number;onDownload:()=>void;disabled:boolean}) {
+export function ShareEnPreviewCard({report,copy,index,onDownload,disabled,onReprocess,processingDisabled=false}:{report:WccatDailyReport;copy:ShareEnCopy;index:number;onDownload:()=>void;disabled:boolean;onReprocess?:()=>void;processingDisabled?:boolean}) {
  const root=useRef<HTMLDivElement>(null);
  const [error,setError]=useState('');
  const [failedImage,setFailedImage]=useState('');
- const imageSrc=shareEnImage(report,copy,index)?.src;
+ const image=shareEnImage(report,copy,index);
+ const imageSrc=image?.src;
+ const asset=image?.processed?validateImageAsset(copy.highlights[index-1]?.imageAsset):undefined;
  const identity=shareEnCardIdentity(report,copy,index);
  useLayoutEffect(()=>{
   let active=true;
@@ -113,5 +121,5 @@ export function ShareEnPreviewCard({report,copy,index,onDownload,disabled}:{repo
   host?.addEventListener('error',afterImage,true);
   return ()=>{active=false;host?.removeEventListener('load',afterImage,true);host?.removeEventListener('error',afterImage,true);};
  },[report,copy,index,identity,imageSrc]);
- return <section className="shareen-preview-card"><div className="shareen-preview-heading"><h4>{identity}</h4><button type="button" disabled={disabled||Boolean(error)} onClick={onDownload}>↓ PNG</button></div><div ref={root}><ScaledPoster width={1200} height={1500}><ShareEnPoster report={report} copy={copy} index={index}/></ScaledPoster></div>{index>0&&(!imageSrc||failedImage===imageSrc)?<p className="data-muted">配图已隐藏或不可用，已自动收起图片区。</p>:null}{index>0&&!getShareEnBattle(report,copy,index)?<p className="data-muted">暂无英文态度短句，可重新生成 ShareEn 补齐。</p>:null}{error?<p className="data-error" role="alert">{error}</p>:null}</section>;
+ return <section className="shareen-preview-card"><div className="shareen-preview-heading"><h4>{identity}</h4><div className="shareen-preview-actions">{index>0&&onReprocess?<button type="button" disabled={disabled||processingDisabled} onClick={onReprocess}>重新处理配图</button>:null}<button type="button" disabled={disabled||Boolean(error)} onClick={onDownload}>↓ PNG</button></div></div><div ref={root}><ScaledPoster width={1200} height={1500}><ShareEnPoster report={report} copy={copy} index={index}/></ScaledPoster></div>{index>0&&imageSrc&&failedImage!==imageSrc?<p className="data-muted" role="status">{image?.processed?`配图已就绪 · ${image.layout==='split'?'分栏 400 × 480（完整原图）':'通栏 1072 × 360'}${asset?.reason?` · ${asset.reason}`:''}`:'原图预览 · 待处理，当前完整显示原图'}</p>:null}{index>0&&(!imageSrc||failedImage===imageSrc)?<p className="data-muted">配图已隐藏或不可用，已自动收起图片区。</p>:null}{index>0&&!getShareEnBattle(report,copy,index)?<p className="data-muted">暂无英文态度短句，可重新生成 ShareEn 补齐。</p>:null}{error?<p className="data-error" role="alert">{error}</p>:null}</section>;
 }

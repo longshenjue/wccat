@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getDb, writeGeneration } from "@/lib/db";
 import { guardedWrite } from "@/lib/maintenance";
+import type { WccatDailyReport } from "@/lib/daily-report";
+import { restoreImageAssets, sharingReportForClient } from "@/lib/shareen-image-state";
 
 export const dynamic = "force-dynamic";
 
@@ -127,13 +129,25 @@ export async function GET(request: Request) {
   const where = buildSearchWhere(table, query);
   const params = query ? table.searchableColumns.map(() => `%${query}%`) : [];
   const database = getDb();
-  const rows = database
+  const records = database
     .prepare(
       `select ${table.columns.map(quoteIdentifier).join(", ")} from ${quoteIdentifier(table.name)} ${where.sql} order by ${
         table.orderBy
       } limit ? offset ?`
     )
-    .all(...params, pageSize, offset) as Array<Record<string, unknown>>;
+    .iterate(...params, pageSize, offset) as Iterable<Record<string, unknown>>;
+  const rows = Array.from(records, row => {
+    if (table.name !== "daily_reports") return row;
+    // Keep the editor's payload column a JSON string, including for historical schemas.
+    try {
+      const payload = JSON.parse(String(row.payload));
+      const publicPayload = payload?.shareEn ? sharingReportForClient(payload) : payload;
+      return { ...row, payload: JSON.stringify(publicPayload, (key, value) => key === "dataBase64" ? undefined : value) };
+    } catch {
+      // A corrupt document cannot safely be echoed, but its row can still be repaired.
+      return { ...row, payload: null };
+    }
+  });
   const count = database
     .prepare(`select count(*) as total from ${quoteIdentifier(table.name)} ${where.sql}`)
     .get(...params) as { total: number };
@@ -163,6 +177,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No valid columns" }, { status: 400 });
   }
 
+  if (table.name === "daily_reports" && "payload" in values && !restoreDailyEditorPayload(values)) {
+    return NextResponse.json({ error: "Invalid daily payload or image asset" }, { status: 400 });
+  }
   const columns = Object.keys(values);
   guardedWrite(getDb(), () => getDb()
     .prepare(
@@ -200,13 +217,21 @@ export async function PATCH(request: Request) {
   }
 
   const valueColumns = Object.keys(values);
-  guardedWrite(getDb(), () => getDb()
-    .prepare(
+  const database = getDb();
+  const updated = guardedWrite(database, () => {
+    if (table.name === "daily_reports" && "payload" in values) {
+      const current = database.prepare("select payload from daily_reports where report_date = ?")
+        .get(key.report_date) as {payload: string} | undefined;
+      if (!restoreDailyEditorPayload(values, current?.payload)) return false;
+    }
+    database.prepare(
       `update ${quoteIdentifier(table.name)} set ${valueColumns
         .map((column) => `${quoteIdentifier(column)} = ?`)
         .join(", ")} where ${table.primaryKeys.map((column) => `${quoteIdentifier(column)} = ?`).join(" and ")}`
-    )
-    .run(...valueColumns.map((column) => values[column]), ...table.primaryKeys.map((column) => key[column])), generation);
+    ).run(...valueColumns.map((column) => values[column]), ...table.primaryKeys.map((column) => key[column]));
+    return true;
+  }, generation);
+  if (!updated) return NextResponse.json({ error: "Invalid daily payload or image asset" }, { status: 400 });
 
   return NextResponse.json({ ok: true });
 }
@@ -236,6 +261,33 @@ export async function DELETE(request: Request) {
     .run(...table.primaryKeys.map((column) => key[column])), generation);
 
   return NextResponse.json({ ok: true });
+}
+
+/** The development editor submits raw JSON and may edit the Chinese source as well as its copy. */
+function restoreDailyEditorPayload(values: Record<string, unknown>, baselinePayload?: string) {
+  let baseline: WccatDailyReport | undefined;
+  if (baselinePayload) {
+    try { baseline = JSON.parse(baselinePayload); } catch { /* Allow repair of malformed historical rows. */ }
+  }
+  try {
+    const next = JSON.parse(String(values.payload), (key, value) => {
+      if (key === "dataBase64") throw new Error("Private image bytes");
+      return value;
+    }) as WccatDailyReport;
+    const copy = next?.shareEn;
+    if (Array.isArray(copy?.highlights)) {
+      // Bind to the current database row and check the original source before using any edited topic covers.
+      const saved = baseline?.shareEn;
+      const previous = baseline && baseline.reportDate === next.reportDate && saved && Array.isArray(saved.highlights)
+        ? restoreImageAssets(baseline, saved, saved)
+        : undefined;
+      next.shareEn = restoreImageAssets(next, copy, previous, { submitted: copy });
+    }
+    values.payload = JSON.stringify(next);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function tableSummaries() {

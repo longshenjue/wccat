@@ -3,6 +3,7 @@ import {createJob,type JobInput} from '@/lib/admin-jobs';
 import {readDailyReportFromDb} from '@/lib/db';
 import {parseDailyReportDate} from '@/lib/daily-window';
 import {saveShareEnEdits} from '@/lib/sharing';
+import {sharingReportForClient} from '@/lib/shareen-image-state';
 import {shareEnRevision} from '@/lib/shareen';
 
 export const dynamic='force-dynamic';
@@ -15,7 +16,7 @@ function reportForDate(date:unknown){
  if(!report)throw new AdminError('该日期尚无日报，请先生成日报。',404);
  return report;
 }
-const sharingPayload=(report:ReturnType<typeof reportForDate>)=>({report,shareEnRevision:shareEnRevision(report.shareEn)});
+const sharingPayload=(report:ReturnType<typeof reportForDate>)=>({report:sharingReportForClient(report),shareEnRevision:shareEnRevision(report.shareEn)});
 export async function GET(request:Request){
  try{
   requireAdmin(request);
@@ -39,9 +40,10 @@ export async function POST(request:Request){
    }
   }
   const format=body.format??'all';
-  if(format!=='all'&&format!=='english'&&format!=='shareen')throw new AdminError('分享生成类型无效。');
+  if(format!=='all'&&format!=='english'&&format!=='shareen'&&format!=='images')throw new AdminError('分享生成类型无效。');
   if(body.force!==undefined&&typeof body.force!=='boolean')throw new AdminError('强制重生成参数无效。');
-  const input:JobInput={kind:'sharing',reportDate:date,shareFormat:format,force:body.force===true};
+  if(body.topicId!==undefined&&typeof body.topicId!=='string')throw new AdminError('焦点配图标识无效。');
+  const input:JobInput={kind:'sharing',reportDate:date,shareFormat:format,topicId:body.topicId,force:body.force===true};
   return json({job:createJob(input)},202);
  }catch(error){return failure(error);}
 }

@@ -15,3 +15,14 @@ export function parseAllowedImageUrl(value: string): URL {
   }
   return url;
 }
+
+export function isGeneratedImageUrl(url: URL): boolean {
+  return url.hostname === 'pollinations.ai' || url.hostname.endsWith('.pollinations.ai');
+}
+
+/** ShareEn uses original publisher photos. Feed illustrations are generated on request. */
+export function parseShareEnImageUrl(value: string): URL {
+  const url = parseAllowedImageUrl(value);
+  if (isGeneratedImageUrl(url)) throw new Error('Generated illustration is not a ShareEn photo');
+  return url;
+}

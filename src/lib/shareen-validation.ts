@@ -1,8 +1,9 @@
 import type {WccatDailyReport} from './daily-report';
 import type {ShareEnCopy} from './shareen-types';
 import {numericalFacts,sameNumericalFacts} from './translation-facts';
-import {parseAllowedImageUrl} from './image-proxy';
+import {parseAllowedImageUrl,isGeneratedImageUrl} from './image-proxy';
 import {normaliseShareEnBattle} from './shareen-battle';
+import {validateImageAsset} from './shareen-image-types';
 
 export type ShareEnValidationOptions={onWarning?:(message:string)=>void};
 function record(value:unknown,path:string):Record<string,unknown>{
@@ -42,14 +43,23 @@ export function validateShareEnStructure(value:unknown,report:WccatDailyReport,o
   if(typeof h.topicId!=='string'||!expected.some(t=>t.id===h.topicId))throw new Error('Unknown highlight topic identity');
   if(ids.has(h.topicId))throw new Error('Duplicate highlight topic');ids.add(h.topicId);
   let imageUrl:string|undefined;
+  if(h.hideImage!==undefined&&typeof h.hideImage!=='boolean')throw new Error('Invalid hideImage option');
+  let hideImage=h.hideImage;
   if(h.imageUrl!==undefined&&h.imageUrl!==''){
    if(typeof h.imageUrl!=='string')throw new Error('Invalid highlight image URL');
-   try{imageUrl=parseAllowedImageUrl(h.imageUrl.trim()).href;}catch{throw new Error('Unapproved highlight image URL');}
+   let source:URL;
+   try{source=parseAllowedImageUrl(h.imageUrl.trim());}catch{throw new Error('Unapproved highlight image URL');}
+   if(isGeneratedImageUrl(source)){
+    // Previously permitted overrides can be retired without disabling the saved story or its text editor.
+    const saved=report.shareEn?.highlights?.find(item=>item.topicId===h.topicId);
+    if(saved?.imageUrl!==h.imageUrl)throw new Error('Unapproved highlight image URL');
+    hideImage=true;
+   }else imageUrl=source.href;
   }
-  if(h.hideImage!==undefined&&typeof h.hideImage!=='boolean')throw new Error('Invalid hideImage option');
+  const imageAsset=validateImageAsset(h.imageAsset);
   const battle=h.battle===undefined?undefined:normaliseShareEnBattle(h.battle,report,h.topicId);
   if(h.battle!==undefined&&!battle)options.onWarning?.('ShareEn optional debate content omitted; article remains usable.');
-  return {...(imageUrl?{imageUrl}:{}),...(h.hideImage!==undefined?{hideImage:h.hideImage}:{}),...(battle?{battle}:{}),topicId:h.topicId,hook:text(h.hook,'highlight.hook'),whatHappened:text(h.whatHappened,'highlight.whatHappened'),context:typeof h.context==='string'?h.context.trim():'',whyItMatters:text(h.whyItMatters,'highlight.whyItMatters')};
+  return {...(imageAsset?{imageAsset}:{}),...(imageUrl?{imageUrl}:{}),...(hideImage!==undefined?{hideImage}:{}),...(battle?{battle}:{}),topicId:h.topicId,hook:text(h.hook,'highlight.hook'),whatHappened:text(h.whatHappened,'highlight.whatHappened'),context:typeof h.context==='string'?h.context.trim():'',whyItMatters:text(h.whyItMatters,'highlight.whyItMatters')};
  });
  const top3=list(data.top3,'top3'),top=originalTop3(report);
  if(top3.length!==top.length)throw new Error('Incomplete top3 summaries');

@@ -39,10 +39,17 @@ export function previewCleanup(db:Database.Database,range:DateRange,now=Date.now
    const line=canonicalRow(row);hash.update(line);estimatedBytes+=Buffer.byteLength(line);counts[table]++;
   }
  }
- const reports=db.prepare('select payload from daily_reports').all() as {payload:string}[];
- const windows=reports.flatMap(row=>{try{const data=JSON.parse(row.payload);return typeof data.windowStart==='string'&&typeof data.windowEnd==='string'?[{start:data.windowStart,end:data.windowEnd}]:[];}catch{return [];}});
+ // Only the coverage fields need to leave SQLite. Historical reports can carry several large WebPs.
+ const windows=db.prepare(`
+  with reports(document) as (
+   select case when json_valid(payload) then payload else '{}' end from daily_reports
+  )
+  select case json_type(document,'$.windowStart') when 'text' then json_extract(document,'$.windowStart') end as start,
+         case json_type(document,'$.windowEnd') when 'text' then json_extract(document,'$.windowEnd') end as end
+  from reports
+ `).all() as {start:string|null;end:string|null}[];
  const missing=new Set<string>();
- for(const day of eligibleDates)if(!windows.some(win=>win.start<=day&&win.end>=day))missing.add(day.slice(0,10));
- return {range,cutoff,digest:hash.digest('hex'),counts,eligibleDates,protected:rows.length-eligibleDates.length,dailyKept:reports.length,daysWithoutReports:[...missing],estimatedBytes};
+ for(const day of eligibleDates)if(!windows.some(win=>win.start!==null&&win.end!==null&&win.start<=day&&win.end>=day))missing.add(day.slice(0,10));
+ return {range,cutoff,digest:hash.digest('hex'),counts,eligibleDates,protected:rows.length-eligibleDates.length,dailyKept:windows.length,daysWithoutReports:[...missing],estimatedBytes};
 }
 

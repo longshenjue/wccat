@@ -20,3 +20,22 @@ test('a trusted CDN redirect cannot be followed into private network services',a
  assert.equal(response.status,403);
  assert.deepEqual(requests,['https://pic1.zhimg.com/image.jpg']);
 });
+
+test('ShareEn original-photo proxy excludes generators both initially and after publisher redirects; feeds still support them',async t=>{
+ const {GET}=await import('../src/app/api/image/route');
+ const publisher='https://pic1.zhimg.com/press.jpg';
+ const generator='https://image.pollinations.ai/prompt/illustration';
+ const fetched:string[]=[];
+ t.mock.method(globalThis,'fetch',async(url:URL)=>{
+  fetched.push(url.href);
+  if(url.href===publisher)return new Response(null,{status:302,headers:{location:generator}});
+  return new Response('fixture',{headers:{'content-type':'image/png'}});
+ });
+ const proxy=(url:string,shareEn:boolean)=>GET(new Request('http://localhost/api/image?source=zhihu&url='+encodeURIComponent(url)+(shareEn?'&mode=shareen':'')));
+ assert.equal((await proxy(generator,true)).status,400);
+ assert.deepEqual(fetched,[]);
+ assert.equal((await proxy(publisher,true)).status,403);
+ assert.deepEqual(fetched,[publisher]);
+ assert.equal((await proxy(generator,false)).status,200);
+ assert.deepEqual(fetched,[publisher,generator]);
+});
