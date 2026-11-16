@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getChinaDateTime } from "@/lib/date";
 import { InsightImage } from "@/components/insight-image";
-import { DailyShare } from "@/components/daily-share";
 import type { DailyReportTopic, WccatDailyReport } from "@/lib/daily-report";
 import { sentimentLabel } from "@/lib/sentiment";
 
@@ -84,7 +83,6 @@ export function DailyWorkbench({ report }: DailyWorkbenchProps) {
                 <span />
               </button>
             </div>
-            <DailyShare report={report} />
           </div>
         </header>
 

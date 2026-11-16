@@ -7,6 +7,7 @@ import type {AdminJob} from '@/lib/admin-jobs';
 import type {DataSummary} from '@/lib/admin-data-stats';
 import type {CleanupPreview} from '@/lib/data-preview';
 import {AdminDailyPanel} from './admin-daily-panel';
+import {AdminSharingPanel} from './admin-sharing-panel';
 import {AdminJobLog} from './admin-job-log';
 import {AdminHourlyBrowser} from './admin-hourly-browser';
 import {AdminDailyBrowser} from './admin-daily-browser';
@@ -14,7 +15,7 @@ import {useAdminQuery} from './admin-query';
 type Confirmation={title:string;phrase:string;body:Record<string,unknown>;preview?:CleanupPreview;download:boolean};
 const bytes=(n:number)=>n>=1024**3?(n/1024**3).toFixed(2)+' GiB':n>=1024**2?(n/1024**2).toFixed(1)+' MiB':(n/1024).toFixed(1)+' KiB';
 const statuses:Record<string,string>={queued:'等待执行',running:'正在执行',ready:'可下载',complete:'已完成',partial:'已生成 · 有警告',failed:'失败',cancelled:'已取消',expired:'临时文件已移除'};
-const kinds:Record<string,string>={preview:'清理预览',export:'归档下载',cleanup:'小时数据清理',prepare:'启用空间回收',reclaim:'回收空闲空间',daily:'手动生成日报'};
+const kinds:Record<string,string>={preview:'清理预览',export:'归档下载',cleanup:'小时数据清理',prepare:'启用空间回收',reclaim:'回收空闲空间',daily:'手动生成日报',sharing:'生成分享内容'};
 async function api(path='',body?:Record<string,unknown>){
  const response=await fetch('/api/admin/'+path,{...(body?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{}),cache:'no-store'});
  const result=await response.json();
@@ -24,9 +25,10 @@ async function api(path='',body?:Record<string,unknown>){
 export function AdminDataPanel(){
  const today=getChinaDate();
  const {params,change}=useAdminQuery();
- const tabs=[['overview','概览'],['hourly','小时报'],['daily','日报'],['storage','归档与存储'],['tasks','任务日志']];
+ const tabs=[['overview','概览'],['hourly','小时报'],['daily','日报'],['sharing','分享制作'],['storage','归档与存储'],['tasks','任务日志']];
  const tab=tabs.some(([key])=>key===params.get('tab'))?params.get('tab')!:'overview';
  const dailyDate=params.get('dDate')??getDailyReportWindow().reportDate;
+ const sharingDate=params.get('sDate')??dailyDate;
  const [authenticated,setAuthenticated]=useState<boolean|null>(null),[configured,setConfigured]=useState(true);
  const [password,setPassword]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
  const [summary,setSummary]=useState<DataSummary|null>(null),[jobs,setJobs]=useState<AdminJob[]>([]);
@@ -58,9 +60,9 @@ export function AdminDataPanel(){
   },2000);
   return()=>{stopped=true;window.clearInterval(timer);};
  },[authenticated,loadSummary]);
- async function submit(body:Record<string,unknown>){
+ async function submit(body:Record<string,unknown>,path='data'){
   setBusy(true);setMessage('');
-  try{const result=await api('data',body);if(result.job)setJobs(old=>[result.job,...old.filter(job=>job.id!==result.job.id)]);else await loadSummary();return true;}
+  try{const result=await api(path,body);if(result.job)setJobs(old=>[result.job,...old.filter(job=>job.id!==result.job.id)]);else await loadSummary();return true;}
   catch(error){setMessage(error instanceof Error?error.message:'操作失败。');return false;}
   finally{setBusy(false);}
  }
@@ -78,16 +80,18 @@ export function AdminDataPanel(){
  async function logout(){await fetch('/api/admin/session',{method:'DELETE'});setAuthenticated(false);setSummary(null);setJobs([]);}
  const disabled=busy||active;
  const dailyRevision=jobs.filter(job=>job.kind==='daily').map(job=>job.id+':'+job.status).join('|');
+ const sharingRevision=jobs.filter(job=>job.kind==='daily'||job.kind==='sharing').map(job=>job.id+':'+job.status).join('|');
  if(authenticated===null)return <main className="data-admin"><p role="status">正在检查管理员会话…</p></main>;
- if(!authenticated)return <main className="data-admin data-admin-login"><Link href="/daily" className="data-admin-back">← 返回日报</Link><section className="data-card"><p className="eyebrow">WcCAT · ADMIN</p><h1>数据管理</h1><p className="data-muted">管理员登录后，可以查看小时报、日报与趋势，生成日报，下载归档并管理存储空间。</p>{configured?<form onSubmit={login}><label htmlFor="admin-password">管理员密码</label><input id="admin-password" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/><button disabled={busy} className="data-primary">{busy?'正在登录…':'登录管理后台'}</button></form>:<p>管理员入口尚未配置。请先按部署文档设置运行时管理员密码散列与会话密钥。</p>}{message?<p role="alert" className="data-error">{message}</p>:null}</section></main>;
+ if(!authenticated)return <main className="data-admin data-admin-login"><Link href="/daily" className="data-admin-back">← 返回日报</Link><section className="data-card"><p className="eyebrow">WcCAT · ADMIN</p><h1>数据管理</h1><p className="data-muted">管理员登录后，可以查看小时报、日报与趋势，生成日报与制作分享，下载归档并管理存储空间。</p>{configured?<form onSubmit={login}><label htmlFor="admin-password">管理员密码</label><input id="admin-password" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/><button disabled={busy} className="data-primary">{busy?'正在登录…':'登录管理后台'}</button></form>:<p>管理员入口尚未配置。请先按部署文档设置运行时管理员密码散列与会话密钥。</p>}{message?<p role="alert" className="data-error">{message}</p>:null}</section></main>;
  return <main className="data-admin">
-  <header className="data-admin-header"><div><p className="eyebrow">WcCAT · ADMIN</p><h1>日报与数据管理</h1><p className="data-muted">历史查询与热度趋势 · 日报生成 · 数据归档</p></div><nav><Link href="/daily">查看日报 ↗</Link><button onClick={()=>loadSummary().catch(error=>setMessage(error.message))} disabled={busy}>刷新状态</button><button onClick={logout}>退出登录</button></nav></header>
+  <header className="data-admin-header"><div><p className="eyebrow">WcCAT · ADMIN</p><h1>日报与数据管理</h1><p className="data-muted">历史查询与热度趋势 · 日报生成 · 分享制作 · 数据归档</p></div><nav><Link href="/daily">查看日报 ↗</Link><button onClick={()=>loadSummary().catch(error=>setMessage(error.message))} disabled={busy}>刷新状态</button><button onClick={logout}>退出登录</button></nav></header>
   <nav className="admin-tabs" role="tablist" aria-label="后台功能">{tabs.map(([key,label],index)=><button key={key} role="tab" id={'admin-tab-'+key} aria-controls="admin-tab-panel" aria-selected={tab===key} tabIndex={tab===key?0:-1} onClick={()=>change({tab:key})} onKeyDown={event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;change({tab:tabs[next][0]});(event.currentTarget.parentElement?.children[next] as HTMLElement)?.focus();}}}>{label}</button>)}</nav>
   {active?<div className="admin-task-banner" role="status"><span>后台任务进行中 · {jobs.find(job=>['queued','running'].includes(job.status))?.progress||'准备执行'}</span><button onClick={()=>change({tab:'tasks'})}>查看任务日志</button></div>:null}
   {message?<p className="data-error" role="alert">{message}</p>:null}
   <section id="admin-tab-panel" role="tabpanel" aria-labelledby={'admin-tab-'+tab}>
   {tab==='hourly'?<AdminHourlyBrowser/>:null}
   {tab==='daily'?<><AdminDailyPanel disabled={disabled} revision={dailyRevision} date={dailyDate} onDateChange={date=>change({dDate:date,dItem:null})} onGenerate={async date=>{const ok=await submit({action:'daily',reportDate:date});if(ok)change({tab:'tasks'});return ok;}}/><AdminDailyBrowser date={dailyDate} revision={dailyRevision}/></>:null}
+  {tab==='sharing'?<AdminSharingPanel date={sharingDate} revision={sharingRevision} disabled={disabled} onDateChange={date=>change({sDate:date})} onGenerate={async(format,force)=>{const ok=await submit({action:'generate',date:sharingDate,format,force},'share');if(ok)change({tab:'tasks'});return ok;}} onSaved={loadSummary}/>:null}
   {tab==='overview'||tab==='storage'?<>
   {summary?<section className="data-stat-grid" aria-label="存储用量">
    <div className="data-card"><span>主数据库</span><strong>{bytes(summary.storage.databaseBytes)}</strong><small>WAL {bytes(summary.storage.walBytes)}</small></div>
@@ -112,7 +116,8 @@ export function AdminDataPanel(){
   </>:null}
   {tab==='tasks'?<section className="data-card"><h2>任务与下载</h2><p className="data-muted">后台任务独立运行，关闭此页面后仍会继续。临时文件在确认清理后移除；超过24小时的旧文件将在下一次导出时回收。</p><div className="data-jobs">
    {jobs.map(job=><article className="data-job" key={job.id}><header><strong>{kinds[job.kind]}</strong><span className={'data-badge '+job.status}>{statuses[job.status]??job.status}</span><time>{new Date(job.createdAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</time></header>{job.input.range?<p>{job.input.range.start} 至 {job.input.range.end}</p>:null}<p className="data-muted">{job.progress}</p>{job.error?<p role="status" className="data-error">{job.error}</p>:null}
-    {job.kind==='daily'?<><p>日报所属日期：{job.input.reportDate}</p>{job.result.daily?<div><p>话题 {job.result.daily.topicCount} 个 · 稿件模型 {job.result.daily.model} · TOP1 分析 {job.result.daily.analysisModel} · 英文{job.result.daily.englishReady?'已就绪':'未就绪'}</p><Link className="data-download" href={'/daily?date='+encodeURIComponent(job.result.daily.reportDate)}>查看该日日报 ↗</Link></div>:null}<AdminJobLog id={job.id} status={job.status} defaultOpen={job.status==='queued'||job.status==='running'||jobs.find(item=>item.kind==='daily')?.id===job.id}/></>:null}
+    {job.kind==='daily'?<><p>日报所属日期：{job.input.reportDate}</p>{job.result.daily?<div><p>话题 {job.result.daily.topicCount} 个 · 稿件模型 {job.result.daily.model} · TOP1 分析 {job.result.daily.analysisModel} · 英文{job.result.daily.englishReady?'已就绪':'未就绪'} · ShareEn{job.result.daily.shareEnReady?'已就绪':'未就绪'}</p><Link className="data-download" href={'/daily?date='+encodeURIComponent(job.result.daily.reportDate)}>查看该日日报 ↗</Link></div>:null}<button onClick={()=>change({tab:'sharing',sDate:job.input.reportDate??dailyDate})}>查看或生成分享 →</button><AdminJobLog id={job.id} status={job.status} defaultOpen={job.status==='queued'||job.status==='running'||jobs.find(item=>item.kind==='daily')?.id===job.id}/></>:null}
+    {job.kind==='sharing'?<><p>分享所属日期：{job.input.reportDate} · {job.input.shareFormat==='english'?'英文长图':job.input.shareFormat==='shareen'?'ShareEn':'全部格式'}{job.input.force?' · 强制重生成':''}</p>{job.result.sharing?<p>英文{job.result.sharing.englishReady?'已就绪':'未就绪'} · ShareEn{job.result.sharing.shareEnReady?'已就绪':'未就绪'}</p>:null}<button onClick={()=>change({tab:'sharing',sDate:job.input.reportDate??dailyDate})}>查看分享与下载 →</button><AdminJobLog id={job.id} status={job.status} defaultOpen={job.status==='queued'||job.status==='running'||jobs.find(item=>item.kind==='sharing')?.id===job.id}/></>:null}
     {job.kind==='export'&&job.result.files?.map(file=><div className="data-file" key={file.id}><b>{file.meta.month} · {file.meta.mode==='full'?'完整归档':'仅日报'}</b><small>{file.name}</small><code>SHA-256: {file.sha256}</code>{job.status==='ready'?<a className="data-download" href={'/api/admin/data?download='+job.id+'&file='+file.id} download>{file.downloaded?'再次下载':'下载文件'}</a>:null}</div>)}
     {job.kind==='export'&&job.status==='ready'?<div className="data-actions">{job.input.mode==='full'?<button className="data-danger" disabled={disabled||!job.result.files?.every(file=>file.downloaded)} onClick={()=>confirmCleanup(job.input.previewId!,job.id)}>已保存文件，清理对应小时数据</button>:null}<button disabled={disabled} onClick={()=>openConfirm({title:'移除服务器临时归档',phrase:'移除临时归档',body:{action:'discard',id:job.id},download:false})}>移除临时下载文件</button></div>:null}
     {job.result.cleanup?<p className={job.result.cleanup.reclaimed?'data-success':'data-warning'}>已删除 {job.result.cleanup.deleted.snapshots} 个小时快照；日报保留。{job.result.cleanup.reclaimed?'实际回收主库及WAL约 '+bytes(job.result.cleanup.reclaimedBytes):job.result.cleanup.reclaimError+' 可使用上方“回收空闲空间”重试。'}</p>:null}

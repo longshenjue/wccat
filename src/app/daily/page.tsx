@@ -61,7 +61,7 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
       </aside>
 
       {report ? (
-        <DailyWorkbench report={report} />
+        <DailyWorkbench report={{...report,shareEnglish:undefined,shareEn:undefined}} />
       ) : (
         <section className="content">
           <section className="topbar daily-topbar">

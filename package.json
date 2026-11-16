@@ -15,6 +15,7 @@
     "analyze": "tsx scripts/analyze.ts",
     "daily": "tsx scripts/daily.ts",
     "daily:translate": "tsx scripts/translate-daily.ts",
+    "daily:shareen": "tsx scripts/shareen.ts",
     "admin:password": "tsx scripts/admin-password.ts",
     "archives:register": "tsx scripts/register-archives.ts",
     "storage:prepare": "tsx scripts/prepare-storage.ts",

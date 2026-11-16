@@ -76,19 +76,23 @@ npm run refresh
 npm run daily
 ```
 
-Open `http://localhost:3002/daily`, choose 中文 or English, and click 下载分享图片.
-The PNG shows all Top 10 topics on the left and the complete Top 1 analysis on
-the right, regardless of the selected topic or scroll position. The poster uses
-a fixed two-column layout and expands vertically without truncating text.
+Open `/admin` → 分享制作 to preview and download Chinese/English long images or the
+branded ShareEn multi-card ZIP. Public `/daily` is for reading only. Daily generation
+now attempts ShareEn automatically after the ordinary English translation; downloads
+and format/caption switches reuse saved content and never call AI.
 
-Daily generation uses only snapshots actually collected in the preceding 24
-hours, fills in Top 1 analysis, and saves an English translation in the daily
-report. Downloads run in the browser and do not trigger collection or AI calls.
-If translation fails or the key is absent, Chinese remains available and English
-is disabled; run `npm run daily:translate` after resolving the configuration or
-service issue. For older reports use `npm run daily:translate -- YYYY-MM-DD`.
-These commands only fill English copy, preserve the Chinese report and reuse an
-existing valid translation without another AI call.
+ShareEn includes the original Top10, 2–3 overseas-relevant deep dives and branded
+English captions with numbered summaries of the original daily Top3. Failed
+regeneration preserves existing usable sharing copy. For an older report:
+
+```bash
+npm run daily:shareen -- 2026-11-15
+npm run daily:shareen -- 2026-11-15 --force
+```
+
+Ordinary English backfill remains `npm run daily:translate -- YYYY-MM-DD`.
+See [admin sharing](docs/admin-sharing.md) for date selection, regeneration,
+cache behavior and downloads.
 
 `npm run worker` refreshes immediately, then at 00:00/04:00/08:00/12:00/16:00/20:00
 Asia/Shanghai (six scheduled refreshes per day); it generates the daily

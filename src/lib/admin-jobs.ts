@@ -4,7 +4,7 @@ import {hostname} from 'node:os';
 import {spawn} from 'node:child_process';
 import {resolve,join,sep} from 'node:path';
 import {existsSync,rmSync,unlinkSync} from 'node:fs';
-import {getDb} from './db';
+import {getDb,readDailyReportFromDb} from './db';
 import {dbPath,exportsDir} from './storage-paths';
 import {parseRange,splitMonths,type DateRange} from './data-range';
 import {previewCleanup,businessDigest,type CleanupPreview,type ExportMode} from './data-preview';
@@ -16,9 +16,10 @@ import {requireDailyGenerationData} from './admin-daily';
 import {parseDailyReportDate} from './daily-window';
 import {generateDailyReport} from './daily-report';
 import {appendJobLog,redactJobMessage} from './admin-job-logs';
+import {generateSharing} from './sharing';
 
-export type JobInput={kind:'preview'|'export'|'cleanup'|'prepare'|'reclaim'|'daily';reportDate?:string;range?:DateRange;mode?:ExportMode;previewId?:string;exportJobId?:string;ackDownloaded?:boolean;discardHourly?:boolean;ackMissingReports?:boolean};
-export type JobResult={daily?:{reportDate:string;topicCount:number;model:string;analysisModel:string;englishReady:boolean;warnings:number};preview?:CleanupPreview;previewId?:string;files?:ArchiveFile[];cleanup?:Awaited<ReturnType<typeof cleanupData>>;storage?:Awaited<ReturnType<typeof maintainStorage>>};
+export type JobInput={kind:'preview'|'export'|'cleanup'|'prepare'|'reclaim'|'daily'|'sharing';reportDate?:string;shareFormat?:'all'|'english'|'shareen';force?:boolean;range?:DateRange;mode?:ExportMode;previewId?:string;exportJobId?:string;ackDownloaded?:boolean;discardHourly?:boolean;ackMissingReports?:boolean};
+export type JobResult={daily?:{reportDate:string;topicCount:number;model:string;analysisModel:string;englishReady:boolean;shareEnReady:boolean;warnings:number};sharing?:{reportDate:string;format:'all'|'english'|'shareen';englishReady:boolean;shareEnReady:boolean;warnings:number};preview?:CleanupPreview;previewId?:string;files?:ArchiveFile[];cleanup?:Awaited<ReturnType<typeof cleanupData>>;storage?:Awaited<ReturnType<typeof maintainStorage>>};
 export type AdminJob={id:string;kind:JobInput['kind'];status:string;input:JobInput;result:JobResult;error:string|null;progress:string;pid:number|null;host:string|null;createdAt:number;updatedAt:number;cancelled:boolean};
 type JobRow={id:string;kind:JobInput['kind'];status:string;input:string;result:string|null;error:string|null;progress:string|null;pid:number|null;host:string|null;process_stamp:string|null;created_at:number;updated_at:number;cancelled:number};
 const idPattern=/^[a-f0-9-]{36}$/;
@@ -61,8 +62,15 @@ function verifyProof(input:JobInput,preview:CleanupPreview){
  return [];
 }
 export function createJob(input:JobInput):AdminJob{
- if(!['preview','export','cleanup','prepare','reclaim','daily'].includes(input.kind))throw new Error('任务类型无效。');
+ if(!['preview','export','cleanup','prepare','reclaim','daily','sharing'].includes(input.kind))throw new Error('任务类型无效。');
  if(input.kind==='daily')input={kind:'daily',reportDate:requireDailyGenerationData(input.reportDate).reportDate};
+ if(input.kind==='sharing'){
+  parseDailyReportDate(input.reportDate);
+  if(!readDailyReportFromDb(input.reportDate!))throw new Error('该日期尚无日报，请先生成日报。');
+  if(input.shareFormat!==undefined&&!['all','english','shareen'].includes(input.shareFormat))throw new Error('分享生成类型无效。');
+  if(input.force!==undefined&&typeof input.force!=='boolean')throw new Error('强制重生成参数无效。');
+  input={kind:'sharing',reportDate:input.reportDate,shareFormat:input.shareFormat??'all',force:input.force===true};
+ }
  if(input.kind==='preview'||input.kind==='export')input={...input,range:parseRange(input.range)};
  if(input.kind==='export'&&!['full','daily'].includes(input.mode??''))throw new Error('归档类型无效。');
  if(input.kind==='cleanup')verifyProof(input,previewById(input.previewId));
@@ -73,7 +81,7 @@ export function createJob(input:JobInput):AdminJob{
   getDb().prepare("insert into admin_jobs(id,kind,status,input,created_at,updated_at) values(?,?,'queued',?,?,?)").run(id,input.kind,JSON.stringify(input),now,now);
  }).immediate();
  try{
-  const child=spawn(process.execPath,['--import','tsx',resolve('scripts/admin-job.ts'),id],{cwd:process.cwd(),env:process.env,stdio:input.kind==='daily'?'inherit':'ignore'});
+  const child=spawn(process.execPath,['--import','tsx',resolve('scripts/admin-job.ts'),id],{cwd:process.cwd(),env:process.env,stdio:input.kind==='daily'||input.kind==='sharing'?'inherit':'ignore'});
   getDb().prepare("update admin_jobs set pid=?,host=?,process_stamp=? where id=? and status='queued'").run(child.pid??null,hostname(),child.pid?processStamp(child.pid):null,id);
   child.on('error',()=>getDb().prepare("update admin_jobs set status='failed',error=?,updated_at=? where id=?").run('无法启动后台任务进程。',Date.now(),id));
   child.unref();
@@ -139,8 +147,21 @@ export async function runJob(id:string){
    requireDailyGenerationData(input.reportDate);
    const report=await generateDailyReport(parseDailyReportDate(input.reportDate),{requireData:true,log});
    const analysisModel=report.topics[0]?.aiAnalysis?.model??'none';
-   result={daily:{reportDate:report.reportDate,topicCount:report.topics.length,model:report.model,analysisModel,englishReady:Boolean(report.shareEnglish),warnings}};
-   if(!report.shareEnglish||report.model.includes('local-template')||analysisModel==='none'||analysisModel==='local-rules')status='partial';
+   result={daily:{reportDate:report.reportDate,topicCount:report.topics.length,model:report.model,analysisModel,englishReady:Boolean(report.shareEnglish),shareEnReady:Boolean(report.shareEn),warnings}};
+   if(!report.shareEnglish||(report.topics.length>=2&&!report.shareEn)||report.model.includes('local-template')||analysisModel==='none'||analysisModel==='local-rules')status='partial';
+  }else if(input.kind==='sharing'){
+   let warnings=0;
+   const log=(level:'info'|'warn'|'error',text:string)=>{
+    const entry=appendJobLog(id,level,text);
+    if(level!=='info')warnings++;
+    progress(entry.message);
+    console[level](`[WcCAT][sharing:${id}] ${entry.message}`);
+   };
+   const format=input.shareFormat??'all';
+   log('info',`准备生成 ${input.reportDate} 分享内容（${format}${input.force?' · 强制重生成':''}）`);
+   const sharing=await generateSharing(input.reportDate!,{format,force:input.force,log});
+   result={sharing:{reportDate:sharing.report.reportDate,format,englishReady:sharing.englishReady,shareEnReady:sharing.shareEnReady,warnings}};
+   if(warnings>0||(format!=='shareen'&&!sharing.englishReady)||(format!=='english'&&!sharing.shareEnReady))status='partial';
   }else if(input.kind==='preview'){
    progress('正在统计所选范围、日报覆盖与数据版本');
    const source=new Database(dbPath,{readonly:true,fileMustExist:true});
@@ -175,13 +196,13 @@ export async function runJob(id:string){
   }else{
    result={storage:await maintainStorage(input.kind,progress)};
   }
-  getDb().prepare('update admin_jobs set status=?,result=?,progress=?,updated_at=? where id=?').run(status,JSON.stringify(result),status==='partial'?'中文日报已生成；英文或部分 AI 内容未就绪，请查看日志':'任务完成',Date.now(),id);
+  getDb().prepare('update admin_jobs set status=?,result=?,progress=?,updated_at=? where id=?').run(status,JSON.stringify(result),status==='partial'?(input.kind==='sharing'?'部分分享内容未就绪，请查看日志后重试':'中文日报已生成；英文、ShareEn 或部分 AI 内容未就绪，请查看日志'):'任务完成',Date.now(),id);
  }catch(error){
   if(job.kind==='export')rmSync(jobExportDirectory(id),{recursive:true,force:true});
   const message=redactJobMessage(error instanceof Error?error.message:'任务失败。');
-  if(job.kind==='daily'){
+  if(job.kind==='daily'||job.kind==='sharing'){
    appendJobLog(id,'error',message);
-   console.error(`[WcCAT][daily:${id}] ${message}`);
+   console.error(`[WcCAT][${job.kind}:${id}] ${message}`);
   }
   getDb().prepare('update admin_jobs set status=?,error=?,updated_at=? where id=?').run(message.includes('取消')?'cancelled':'failed',message,Date.now(),id);
  }finally{job=getJob(id);}

@@ -4,13 +4,15 @@ import {
   readLatestDailyReportFromDb,
   readTopicAnalysesForDate,
   saveDailyReportToDb,
-  saveDailyShareEnglishToDb,
   writeGeneration
 } from "./db";
 import { normalizeTitle } from "./normalize";
 import { readDailyReportInput } from "./daily-report-input";
 import { translateDailyShare } from "./daily-share-translation";
 import type { DailyShareCopy } from "./daily-share-copy";
+import type { ShareEnCopy } from "./shareen-types";
+import {generateShareEn} from "./shareen";
+import {saveSharingFields} from "./shareen-persistence";
 import { sentimentLabel } from "./sentiment";
 import { analyzeTopicWithDeepSeek, type TopicAnalysis } from "./topic-analysis";
 import { fetchArticleContexts } from "./fulltext";
@@ -59,6 +61,7 @@ export type WccatDailyReport = {
   videoScript: string;
   model: string;
   shareEnglish?: DailyShareCopy;
+  shareEn?: ShareEnCopy;
   collection?: {observedUntil:string;complete:boolean;sampleCount:number;firstCollectedAt?:string;lastCollectedAt?:string};
 };
 
@@ -121,11 +124,19 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
   saveDailyReportToDb(report, generation);
   log('info', `中文日报已保存，稿件模型：${report.model}`);
   log('info', '正在生成英文分享翻译');
-  report.shareEnglish = await translateDailyShare(report,log);
-  if (report.shareEnglish) {
-    if(!saveDailyShareEnglishToDb(report, generation)) throw new Error('英文保存失败：日报在翻译期间已改变，请重新生成。');
+  const shareEnglish = await translateDailyShare(report,log);
+  if (shareEnglish) {
+    if(!saveSharingFields(report,{shareEnglish},generation)) throw new Error('英文保存失败：日报或分享版本在翻译期间已改变，已保留最新版本。');
+    report.shareEnglish=shareEnglish;
     log('info', '英文分享内容已保存');
   } else log('warn', '中文已生成，英文未就绪');
+  log('info', '正在生成 ShareEn 海外分享卡片与 TOP3 英文配文');
+  const shareEn=await generateShareEn(report,log);
+  if(shareEn){
+    if(!saveSharingFields(report,{shareEn},generation))throw new Error('ShareEn 保存失败：日报在生成期间已改变，请重新生成。');
+    report.shareEn=shareEn;
+    log('info','ShareEn 已保存，可在管理员“分享制作”下载');
+  }else log('warn','日报已保存，ShareEn 暂未就绪，可在管理员“分享制作”重新生成');
   log('info', `日报生成结束：${reportDate}，${topics.length} 个话题`);
   return report;
 }

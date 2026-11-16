@@ -1,4 +1,5 @@
-import { readDailyReportFromDb, readLatestDailyReportFromDb, saveDailyShareEnglishToDb, writeGeneration } from './db';
+import { readDailyReportFromDb, readLatestDailyReportFromDb, writeGeneration } from './db';
+import {saveSharingFields} from './shareen-persistence';
 import { getDailyShareCopy } from './daily-share-copy';
 import { translateDailyShare } from './daily-share-translation';
 
@@ -20,7 +21,7 @@ export async function backfillDailyShareEnglish(reportDate?: string) {
   if (!process.env.DEEPSEEK_API_KEY) throw new Error('Missing runtime DEEPSEEK_API_KEY.');
   const shareEnglish = await translateDailyShare(report);
   if (!shareEnglish) throw new Error('English translation failed; see the translation error above.');
-  if (!saveDailyShareEnglishToDb({ ...report, shareEnglish }, generation)) {
+  if (!saveSharingFields(report, {shareEnglish}, generation)) {
     throw new Error('Daily report changed during translation; rerun the command for the latest version.');
   }
   return { reportDate: report.reportDate, status: 'generated' as const };

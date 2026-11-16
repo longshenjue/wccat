@@ -149,3 +149,7 @@ Sandbox资源与卷权限以当前控制台为准。先看资源估算，再创�
 - https://northflank.com/docs/v1/application/databases-and-persistence/add-a-volume
 - https://northflank.com/docs/v1/application/network/configure-ports
 - https://northflank.com/docs/v1/application/run/access-running-containers-locally
+
+## 分享制作
+
+日报任务默认同步尝试生成 ShareEn 多图及 WcCAT TOP3 英文配文。进入 `/admin` → 分享制作选择日期，可重新生成、编辑与下载；公开 `/daily` 仅供阅读。生成失败不撤销中文日报，可在后台单独重试。详见[管理员分享制作](admin-sharing.md)。
