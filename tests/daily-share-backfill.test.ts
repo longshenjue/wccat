@@ -56,6 +56,13 @@ test('backfills only English, skips valid cached copy, and refuses stale writes'
    await assert.rejects(backfillDailyShareEnglish('2020-01-01'),/not found/i);
    assert.equal(readDailyReportFromDb('2020-01-01'),null);
   });
+  await t.test('numeric-only legacy differences reuse cached English without another AI call',async()=>{
+   const cached={...report,topics:[{...report.topics[0],title:'中国近六成家庭户不超过两个人'}],shareEnglish:{...english,topics:[{...english.topics[0],title:'Nearly 70% of Chinese households have no more than two people'}]}};
+   saveDailyReportToDb(cached);
+   globalThis.fetch=async()=>{throw new Error('Cached English must not call AI');};
+   assert.deepEqual(await backfillDailyShareEnglish(report.reportDate),{reportDate:report.reportDate,status:'cached'});
+   assert.deepEqual(readDailyReportFromDb(report.reportDate),cached);
+  });
  } finally {
   getDb().close();
   globalThis.fetch=previousFetch;

@@ -1,3 +1,4 @@
+import {numericalFacts,sameNumericalFacts} from './translation-facts';
 import type { DailyReportTopic, WccatDailyReport } from './daily-report';
 import type { TopicAnalysis } from './topic-analysis';
 
@@ -35,7 +36,15 @@ export function buildDailyShareCopy(report: WccatDailyReport): DailyShareCopy {
   };
 }
 
-export function validateShareTranslation(value: unknown, original: DailyShareCopy): DailyShareCopy {
+export type NumericalWarning = {path:string;source:string;translated:string};
+export type TranslationValidationOptions = {
+  /** Production favors a usable translation; strict comparison remains available for diagnostics. */
+  numerical?:'warn'|'strict';
+  onNumericalWarning?:(warning:NumericalWarning)=>void;
+};
+
+export function validateShareTranslation(value: unknown, original: DailyShareCopy, options:TranslationValidationOptions = {}): DailyShareCopy {
+  const warnings:NumericalWarning[]=[];
   function validate(candidate: unknown, source: unknown, key = '', path = ''): unknown {
     if (typeof source === 'string') {
       if (typeof candidate !== 'string') throw new Error(`Missing translation: ${path}`);
@@ -47,10 +56,16 @@ export function validateShareTranslation(value: unknown, original: DailyShareCop
       if ((source.trim() && !text) || /\p{Script=Han}/u.test(text)) {
         throw new Error(`Incomplete English translation: ${path}`);
       }
-      const sourceFacts = numericalFacts(source);
-      const translatedFacts = numericalFacts(text);
-      if (JSON.stringify(sourceFacts) !== JSON.stringify(translatedFacts)) {
-        throw new Error(`Changed numerical facts: ${path} (expected ${JSON.stringify(sourceFacts)}, received ${JSON.stringify(translatedFacts)})`);
+      try {
+        const sourceFacts = numericalFacts(source);
+        const translatedFacts = numericalFacts(text);
+        if (!sameNumericalFacts(sourceFacts, translatedFacts)) {
+          if(options.numerical==='strict')throw new Error(`Changed numerical facts: ${path} (expected ${JSON.stringify(sourceFacts)}, received ${JSON.stringify(translatedFacts)})`);
+          warnings.push({path,source,translated:text});
+        }
+      } catch(error) {
+        if(options.numerical==='strict')throw error;
+        warnings.push({path,source,translated:text});
       }
       return text;
     }
@@ -66,69 +81,10 @@ export function validateShareTranslation(value: unknown, original: DailyShareCop
     }
     return source;
   }
-  return validate(value, original) as DailyShareCopy;
-}
-
-/** Compare explicit quantities, including localized dates, season numbers and Chinese magnitudes. */
-function numericalFacts(text: string) {
-  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-  const monthPattern = '(January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.?|Feb\\.?|Mar\\.?|Apr\\.?|Jun\\.?|Jul\\.?|Aug\\.?|Sep\\.?|Sept\\.?|Oct\\.?|Nov\\.?|Dec\\.?)';
-  const monthNumber = (month: string) => months.indexOf(month.slice(0, 3).toLowerCase()) + 1;
-  const dayPattern = '(\\d{1,2})(?:st|nd|rd|th)?';
-  const yearSuffix = '(?:,\\s*|\\s+(?:(?:in|of)\\s+)?)(\\d{4})\\b';
-  const rangeSeparator = '\\s*(?:[-–—−]|to\\b|through\\b|and\\b)\\s*';
-  const normalized = text
-    .replace(/成千上万|成百上千|千千万万/g, '')
-    .replace(/第([零〇一二两三四五六七八九十百千万亿]+)(?=[季届期集章回])/g,
-      (_, number: string) => '第'+chineseInteger(number))
-    // Only explicit magnitudes; titles and idioms must not add numerical facts.
-    .replace(/(?<![\d数几零〇一二两三四五六七八九十百千万亿])([零〇一二两三四五六七八九十百千万亿]*[十百千万亿][零〇一二两三四五六七八九十百千万亿]*)(?=(?:余|多)?(?:人|次|元|粉丝|用户|播放|热度|[，。；：！？、,.!?;:]|$))/g,
-      (_, number: string) => String(chineseInteger(number)))
-    .replace(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/g,
-      (_, year: string, month: string, day: string) => year+'年'+Number(month)+'月'+Number(day)+'日')
-    // Compact ranges must retain their trailing year before single dates are normalized.
-    .replace(new RegExp('\\b'+monthPattern+'\\s+'+dayPattern+rangeSeparator+dayPattern+yearSuffix, 'gi'),
-      (_, month: string, first: string, last: string, year: string) => year+'年'+monthNumber(month)+'月'+first+'日至'+last+'日')
-    .replace(new RegExp('\\b'+dayPattern+rangeSeparator+dayPattern+'\\s+'+monthPattern+yearSuffix, 'gi'),
-      (_, first: string, last: string, month: string, year: string) => year+'年'+monthNumber(month)+'月'+first+'日至'+last+'日')
-    .replace(new RegExp('\\b'+monthPattern+'\\s+'+dayPattern+yearSuffix, 'gi'),
-      (_, month: string, day: string, year: string) => year+'年'+monthNumber(month)+'月'+day+'日')
-    .replace(new RegExp('\\b'+dayPattern+'\\s+'+monthPattern+yearSuffix, 'gi'),
-      (_, day: string, month: string, year: string) => year+'年'+monthNumber(month)+'月'+day+'日')
-    .replace(new RegExp('\\b'+monthPattern+'\\s+'+dayPattern+'\\b', 'gi'),
-      (_, month: string, day: string) => monthNumber(month)+'月'+day+'日')
-    .replace(new RegExp('\\b'+dayPattern+'\\s+'+monthPattern+'\\b', 'gi'),
-      (_, day: string, month: string) => monthNumber(month)+'月'+day+'日');
-  const scales: Record<string, number> = {'万亿': 1e12, '亿': 1e8, '万': 1e4, '千': 1e3, '百': 1e2, trillion: 1e12, billion: 1e9, million: 1e6, thousand: 1e3, hundred: 1e2, k: 1e3, m: 1e6, b: 1e9};
-  const numbers = [...normalized.matchAll(/(\d+(?:[,，]\d{3})*(?:\.\d+)?)\s*(万亿|亿|万|千|百|trillion\b|billion\b|million\b|thousand\b|hundred\b|[kmb]\b)?/gi)]
-    .map((match) => Number(match[1].replace(/[,，]/g, '')) * (scales[match[2]?.toLowerCase()] ?? 1))
-    .sort((left, right) => left - right);
-  // Keep roles as well as quantities: Season 4 / Episode 2 must not match
-  // Season 2 / Episode 4, nor November 12 match December 11.
-  const seasons = [...normalized.matchAll(/第(\d+)季|\bseason\s*(\d+)\b|\b(\d+)(?:st|nd|rd|th)\s+season\b/gi)]
-    .map((match) => Number(match[1] ?? match[2] ?? match[3])).sort((a,b)=>a-b);
-  const dates = [...normalized.matchAll(/(?:(\d{4})年)?(\d{1,2})月(\d{1,2})[日号]/g)]
-    .map((match) => `${match[1] ?? ''}-${Number(match[2])}-${Number(match[3])}`).sort();
-  return {numbers, seasons, dates};
-}
-
-function chineseInteger(text: string): number {
-  for (const [unit, scale] of [['亿', 1e8], ['万', 1e4]] as const) {
-    const index = text.indexOf(unit);
-    if (index >= 0) return (chineseInteger(text.slice(0, index)) || 1) * scale + chineseInteger(text.slice(index + 1));
-  }
-  const digits: Record<string, number> = {零:0, 〇:0, 一:1, 二:2, 两:2, 三:3, 四:4, 五:5, 六:6, 七:7, 八:8, 九:9};
-  const units: Record<string, number> = {十:10, 百:100, 千:1000};
-  let total = 0;
-  let digit = 0;
-  for (const character of text) {
-    if (character in digits) digit = digits[character];
-    else if (character in units) {
-      total += (digit || 1) * units[character];
-      digit = 0;
-    }
-  }
-  return total + digit;
+  const result=validate(value, original) as DailyShareCopy;
+  // Emit only after structural validation succeeds: a rejected draft was never accepted.
+  for(const warning of warnings)options.onNumericalWarning?.(warning);
+  return result;
 }
 
 export function getDailyShareCopy(report: WccatDailyReport, language: ShareLanguage): DailyShareCopy {

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateShareTranslation, type DailyShareCopy } from '../src/lib/daily-share-copy';
+import { validateShareTranslation as validate, type DailyShareCopy } from '../src/lib/daily-share-copy';
+const validateShareTranslation=(value:unknown,source:DailyShareCopy)=>validate(value,source,{numerical:'strict'});
 
 const original: DailyShareCopy = {
  headline:'日报', overview:'总览',

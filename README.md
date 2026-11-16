@@ -97,8 +97,12 @@ Manual `npm run daily` also uses the latest completed 02:00 cutoff, not a rollin
 Reports are dated by the content day: the November 13 report covers November 13 02:00 through November 14 02:00 and is generated at November 14 02:00 (Asia/Shanghai).
 Daily topic persistence is shown as sample counts, not elapsed hours. Keep the worker running in a separate terminal.
 Restarts still trigger one immediate refresh; manual refresh/analyze commands
-remain explicit operations. English share output validation can request one
-corrective translation retry; authentication and network failures do not retry.
+remain explicit operations. English share validation retries once for invalid
+JSON, missing/untranslated content or changed identities. Numerical, ratio and
+date checks are advisory: differences are logged as accepted INFO notices and
+do not trigger retries or disable downloads. Equivalent Chinese/English number
+expressions are normalized first to reduce false notices. Authentication and
+network failures do not retry. See [translation validation](docs/translation-validation.md).
 
 Run `npm test` for daily-window and translation-validation regression checks.
 
