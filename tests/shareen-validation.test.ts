@@ -14,7 +14,7 @@ test('draft validation blocks invalid export copy while leaving source verificat
   const punctuated={...copy,posts:copy.posts.map(p=>({...p,text:p.text.replace('WcCAT Daily Hot',brand)}))};
   assert.deepEqual(validateShareEnStructure(punctuated,report),punctuated);
  }
- assert.throws(()=>validateShareEnStructure({...copy,highlights:[{...copy.highlights[0],context:''},copy.highlights[1]]},report),/context/i);
+ assert.throws(()=>validateShareEnStructure({...copy,highlights:[{...copy.highlights[0],whatHappened:''},copy.highlights[1]]},report),/whatHappened/i);
  assert.throws(()=>validateShareEnStructure({...copy,posts:copy.posts.map(p=>({...p,text:'An unbranded unsaved draft'}))},report),/branding/i);
  assert.throws(()=>validateShareEnStructure({...copy,posts:copy.posts.map(p=>({...p,text:'WcCAT Daily Hot\nA draft missing its ranked summaries\nWcCAT: read the cards.'}))},report),/Top3/i);
  assert.throws(()=>validateShareEnStructure({...copy,overview:{...copy.overview,topics:[...copy.overview.topics].reverse()}},report),/identity|order/i);

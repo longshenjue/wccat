@@ -1,6 +1,8 @@
 import type { WccatDailyReport } from './daily-report';
 import type { ShareEnCopy } from './shareen-types';
 import type { ZipEntry } from './client-zip';
+import {shareEnImage} from './shareen-media';
+import {getShareEnBattle} from './shareen-battle';
 
 /** Measure at export size. All text remains visible, including when it cannot fit. */
 export function fitShareEnCard(card: HTMLElement, identity: string): boolean {
@@ -13,12 +15,19 @@ export function fitShareEnCard(card: HTMLElement, identity: string): boolean {
  return true;
 }
 
+/** Keep user descriptions, replacing only our reserved generated debate suffix. */
+function currentAltText(report:WccatDailyReport,copy:ShareEnCopy,index:number,text:string):string {
+ const base=text.replace(/\sDebate energy \((?:existing (?:AI )?analysis|AI estimate)\):[^\n]*$/u,'');
+ const battle=getShareEnBattle(report,copy,index);if(!battle)return base;
+ return `${base} Debate energy (${battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${battle.redLabel} ${battle.redScore}, ${battle.blueLabel} ${battle.blueScore}. ${battle.redRationale} ${battle.blueRationale}`;
+}
+
 export function shareEnTextFiles(report: WccatDailyReport, copy: ShareEnCopy): ZipEntry[] {
  const selected = copy.posts.find(post => post.id === copy.selectedPostId);
  if (!selected) throw new Error('请先选择有效的英文配文。');
  const texts = [
   {name: 'post.txt', text: selected.text + '\n'},
-  {name: 'alt-text.txt', text: copy.altTexts.map((text,index)=>`${String(index+1).padStart(2,'0')} · ${text}`).join('\n\n')+'\n'},
+  {name: 'alt-text.txt', text: copy.altTexts.map((text,index)=>`${String(index+1).padStart(2,'0')} · ${currentAltText(report,copy,index,text)}`).join('\n\n')+'\n'},
   {name: 'sources.txt', text: [
    'WcCAT Daily Hot · ShareEn', report.reportDate,
    `Collection window: ${report.windowStart} → ${report.windowEnd} (UTC+8)`,
@@ -26,7 +35,9 @@ export function shareEnTextFiles(report: WccatDailyReport, copy: ShareEnCopy): Z
    '', ...report.topics.slice(0,10).flatMap(topic=>[
     `Original rank #${topic.rank}: ${topic.title}`,
     ...topic.links.map(link=>`${link.sourceName}: ${link.url}`), ''
-   ])
+   ]),
+   'Focus card image URLs:',...(copy.highlights??[]).map((_,index)=>{const image=shareEnImage(report,copy,index+1);return `Card ${String(index+2).padStart(2,'0')}: ${image?.url??(copy.highlights[index].hideImage?'Image hidden by administrator':'No approved image available')}`;}),
+   'Focus card debate energy:',...(copy.highlights??[]).map((h,index)=>{const battle=getShareEnBattle(report,copy,index+1);return `Original rank #${report.topics.find(t=>t.id===h.topicId)?.rank??'?'}: ${battle?`${battle.redLabel} ${battle.redScore} vs ${battle.blueLabel} ${battle.blueScore} (${battle.basis==='analysis'?'existing analysis':'AI estimate'}; relative energy, not a poll)`:'Attitude analysis unavailable'}`;})
   ].join('\n')}
  ];
  return texts.map(({name,text})=>({name,data:new TextEncoder().encode(text)}));
@@ -46,4 +57,37 @@ export function downloadBlob(blob: Blob, filename: string): void {
 export async function nextPaint(): Promise<void> {
  await document.fonts.ready;
  await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+}
+
+/** Bound image decoding so a blocked upstream never hangs the download. */
+export async function waitForPosterImages(root:HTMLElement,timeoutMs=8000):Promise<number> {
+ const outcomes=await Promise.all([...root.querySelectorAll<HTMLImageElement>('img[data-shareen-cover]')].map(async image=>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{
+   if(!image.complete)await Promise.race([image.decode(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('Image decode timed out')),timeoutMs);})]);
+   if(!image.naturalWidth)throw new Error('Image unavailable');
+   return true;
+  }catch{
+   image.dispatchEvent(new Event('error'));
+   return false;
+  }finally{if(timer)clearTimeout(timer);}
+ }));
+ return outcomes.filter(ready=>!ready).length;
+}
+
+/** Freeze decoded same-origin pixels. html-to-image must not fetch/cache proxy URLs a second time. */
+export async function inlinePosterImages(root:HTMLElement):Promise<number> {
+ let unavailable=0;
+ for(const image of root.querySelectorAll<HTMLImageElement>('img[data-shareen-cover]')){
+  try{
+   if(!image.complete||!image.naturalWidth||!image.naturalHeight)throw new Error('Image not decoded');
+   const scale=Math.min(1,1600/Math.max(image.naturalWidth,image.naturalHeight));
+   const canvas=document.createElement('canvas');
+   canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+   const context=canvas.getContext('2d');if(!context)throw new Error('Canvas unavailable');
+   context.drawImage(image,0,0,canvas.width,canvas.height);
+   image.src=canvas.toDataURL('image/png');
+  }catch{unavailable++;image.dispatchEvent(new Event('error'));}
+ }
+ return unavailable+await waitForPosterImages(root);
 }

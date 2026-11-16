@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import type { WccatDailyReport } from '@/lib/daily-report';
-import type { ShareEnCopy, SharingFormat } from '@/lib/shareen-types';
+import type { ShareEnBattle, ShareEnCopy, SharingFormat } from '@/lib/shareen-types';
 import { getDailyShareCopy, type ShareLanguage } from '@/lib/daily-share-copy';
-import { downloadBlob, fitShareEnCard, nextPaint, shareEnTextFiles } from '@/lib/share-export';
+import { downloadBlob, fitShareEnCard, nextPaint, shareEnTextFiles, waitForPosterImages, inlinePosterImages } from '@/lib/share-export';
 import { reconcileSharingDraft, updateShareEnTop3, type SharingDraft } from '@/lib/client-share-draft';
+import { getShareEnBattle,normaliseShareEnBattle } from '@/lib/shareen-battle';
 import { validateShareEnStructure } from '@/lib/shareen-validation';
 import { DailySharePoster } from './daily-share-poster';
 import { ScaledPoster, ShareEnPoster, ShareEnPreviewCard, shareEnCardIdentity } from './shareen-poster';
@@ -31,6 +32,14 @@ async function responseData(response:Response):Promise<{report?:WccatDailyReport
  if(!response.ok)throw new SharingRequestError(data.error||'分享操作失败，请重试。',response.status);
  if(typeof data.shareEnRevision!=='string'||!data.shareEnRevision)throw new Error('分享版本标识缺失，请刷新后重试。');
  return data;
+}
+
+function BattleEditor({report,copy,index,disabled,onChange}:{report:WccatDailyReport;copy:ShareEnCopy;index:number;disabled:boolean;onChange:(battle:ShareEnBattle)=>void}) {
+ const stored=copy.highlights[index].battle;
+ const editable=stored&&typeof stored==='object'&&typeof stored.redScore==='number'&&typeof stored.blueScore==='number';
+ const battle=editable?stored:getShareEnBattle(report,copy,index+1);
+ if(!battle)return <p className="data-muted">暂无态度短句，重新生成 ShareEn 时将尝试补齐。</p>;
+ return <fieldset className="shareen-battle-editor"><legend>情绪对抗 · 英文短句</legend><p className="data-muted">标签最多显示3词，说明最多8词；已有分析沿用原分值，未有分析时标记 AI estimate。</p>{!normaliseShareEnBattle(battle,report,copy.highlights[index].topicId)?<p className="data-warning">请填写完整英文态度短句；不完整态度将略过，新闻正文仍可保存。</p>:null}<div className="shareen-edit-grid">{([['redLabel','红侧短标签'],['blueLabel','蓝侧短标签'],['redRationale','红侧简短说明'],['blueRationale','蓝侧简短说明']] as const).map(([field,label])=><label key={field}>{label}<input lang="en" value={battle[field]??''} disabled={disabled} onChange={event=>onChange({...battle,[field]:event.target.value})}/></label>)}</div></fieldset>;
 }
 
 export function AdminSharingPanel({date,revision,disabled,onDateChange,onGenerate,onSaved}:Props) {
@@ -135,7 +144,7 @@ export function AdminSharingPanel({date,revision,disabled,onDateChange,onGenerat
      return Promise.race([image.decode().catch(()=>undefined),new Promise<void>(resolve=>window.setTimeout(resolve,8000))]);
     }));
     const height=poster.scrollHeight;
-    const blob=await toBlob(poster,{width:poster.offsetWidth,height,pixelRatio:Math.min(1.5,8192/height),backgroundColor:'#080d1d',skipFonts:true,filter:node=>!(node instanceof HTMLImageElement)||Boolean(node.complete&&node.naturalWidth),fetchRequestInit:{signal:AbortSignal.timeout(10000)}});
+    const blob=await toBlob(poster,{width:poster.offsetWidth,height,pixelRatio:Math.min(1.5,8192/height),backgroundColor:'#080d1d',skipFonts:true,includeQueryParams:true,filter:node=>!(node instanceof HTMLImageElement)||Boolean(node.complete&&node.naturalWidth),fetchRequestInit:{signal:AbortSignal.timeout(10000)}});
     if(!blob)throw new Error('长图导出失败。');
     downloadBlob(blob,`WcCAT-${date}-${request.language}.png`);
    } else {
@@ -143,12 +152,17 @@ export function AdminSharingPanel({date,revision,disabled,onDateChange,onGenerat
     const cards=[...root.querySelectorAll<HTMLElement>('.shareen-card')];
     const expected=request.index===undefined?checkedCopy.highlights.length+1:1;
     if(cards.length!==expected)throw new Error('卡片画布不完整，请重试。');
+    const missing=await waitForPosterImages(root);
+    await nextPaint();
+    const unavailable=missing+await inlinePosterImages(root);
+    await nextPaint();
+    if(unavailable)setMessage(`有 ${unavailable} 张配图无法加载，已收起图片区并保留文字与情绪条。`);
     // Validate the whole package before rendering any PNG.
     for(const card of cards)fitShareEnCard(card,shareEnCardIdentity(report,checkedCopy,Number(card.dataset.shareenIndex)));
     const files=[];
     for(const card of cards) {
      const index=Number(card.dataset.shareenIndex);
-     const blob=await toBlob(card,{width:1200,height:1500,pixelRatio:1,backgroundColor:'#ffffff',skipFonts:true});
+     const blob=await toBlob(card,{width:1200,height:1500,pixelRatio:1,backgroundColor:'#ffffff',skipFonts:true,includeQueryParams:true,filter:node=>!(node instanceof HTMLImageElement)||Boolean(node.complete&&node.naturalWidth),fetchRequestInit:{signal:AbortSignal.timeout(10000)}});
      if(!blob)throw new Error(`卡片 ${String(index+1).padStart(2,'0')} 导出失败。`);
      const name=`${String(index+1).padStart(2,'0')}-${index===0?'overview':'deep-dive'}.png`;
      if(request.index!==undefined)downloadBlob(blob,`WcCAT-ShareEn-${date}-${name}`);
@@ -179,7 +193,7 @@ export function AdminSharingPanel({date,revision,disabled,onDateChange,onGenerat
   {loaded.key===key&&loaded.error?<p className="data-error" role="alert">{loaded.error}</p>:null}
   {!loading&&!loaded.error&&!report?<p className="admin-sharing-empty">该日期还没有日报，请先在「日报生成」中生成。</p>:null}
   {report?<>
-   <div className="admin-sharing-status"><span className="data-badge ready">中文已就绪</span><span className={`data-badge ${report.shareEnglish?'ready':'partial'}`}>English {report.shareEnglish?'已就绪':'待生成'}</span><span className={`data-badge ${report.shareEn?'ready':'partial'}`}>ShareEn {report.shareEn?'已就绪':'待生成'}</span></div>
+   <div className="admin-sharing-status"><span className="data-badge ready">中文已就绪</span><span className={`data-badge ${report.shareEnglish?'ready':'partial'}`}>English {report.shareEnglish?'已就绪':'待生成'}</span><span className={`data-badge ${report.shareEn?'ready':'partial'}`}>ShareEn {report.shareEn?'文案已保存':'待生成'}</span></div>
    <div className="admin-sharing-actions"><button type="button" disabled={busy} onClick={()=>generate('all',false)}>补齐 English / ShareEn</button>{report.shareEnglish||report.shareEn?<button type="button" disabled={busy} onClick={()=>generate('all',true)}>重新生成 English + ShareEn · AI</button>:null}</div>
    <div className="admin-sharing-tabs" role="tablist" aria-label="分享格式">{([['zh','中文长图'],['en','English 长图'],['shareen','ShareEn · 多图']] as const).map(([id,label])=><button type="button" key={id} role="tab" id={`sharing-tab-${id}`} aria-selected={tab===id} aria-controls="sharing-format-content" disabled={Boolean(exporting)} onClick={()=>{setTab(id);setMessage('');}}>{label}</button>)}</div>
    <div className="admin-sharing-workspace" id="sharing-format-content" role="tabpanel" aria-labelledby={`sharing-tab-${tab}`}>
@@ -190,7 +204,7 @@ export function AdminSharingPanel({date,revision,disabled,onDateChange,onGenerat
     </>:<>
      <div className="admin-sharing-actions"><button type="button" disabled={busy} onClick={()=>generate('shareen',Boolean(report.shareEn))}>{report.shareEn?'重新生成 ShareEn · AI':'生成 ShareEn · AI'}</button><button type="button" className="data-primary" disabled={busy||!copy} onClick={()=>download({kind:'shareen'})}>{exporting?'正在导出…':'↓ 下载整套 ZIP'}</button></div>
      {copy?<>
-      <p className="data-muted">1200 × 1500 · 原始榜单 + 海外重点解读 · ZIP 包含有序 PNG、所选 TOP3 配文、alt text、来源与统计窗口。</p>
+      <p className="data-muted">1200 × 1500 · 两行品牌标题 + 原始榜单 + 海外图片焦点卡 · ZIP 包含有序 PNG、所选 TOP3 配文、alt text、来源与统计窗口。</p>
       {dirty?<p className="shareen-unsaved">有未保存编辑。预览与下载使用当前编辑稿；点击保存后写入日报。</p>:null}
       {conflict?<div className="data-warning" role="alert"><p>服务器上的日报或 ShareEn 已更新。本地编辑已保留；当前预览仍对应编辑时的日报。请先下载或复制需要保留的内容，再载入最新版本后编辑。</p><button type="button" disabled={busy} onClick={reloadDraft}>放弃本地编辑，载入最新版本</button></div>:null}
       <div className="shareen-preview-grid">{Array.from({length:copy.highlights.length+1},(_,index)=><ShareEnPreviewCard key={index} report={report} copy={copy} index={index} disabled={busy} onDownload={()=>download({kind:'shareen',index})}/>)}</div>
@@ -199,11 +213,9 @@ export function AdminSharingPanel({date,revision,disabled,onDateChange,onGenerat
        <label>配文候选<select value={copy.selectedPostId} disabled={busy} onChange={event=>edit(previous=>({...previous,selectedPostId:event.target.value}))}>{copy.posts.map((post,index)=><option value={post.id} key={post.id}>{index+1}. {post.template}</option>)}</select></label>
        {selected?<><p className="shareen-post-reason">推荐理由：{selected.reason}</p><label>所选英文配文<textarea lang="en" value={selected.text} disabled={busy} rows={9} onChange={event=>edit(previous=>({...previous,posts:previous.posts.map(post=>post.id===previous.selectedPostId?{...post,text:event.target.value}:post)}))}/></label></>:null}
        <div className="admin-sharing-actions"><button type="button" disabled={busy||!selected} onClick={copyPost}>复制配文</button><button type="button" disabled={busy||!selected} onClick={()=>downloadText('post.txt')}>↓ 配文 TXT</button><button type="button" disabled={busy} onClick={()=>downloadText('alt-text.txt')}>↓ Alt text TXT</button><button type="button" className="data-primary" disabled={busy||!dirty||conflict} onClick={save}>{saving?'正在保存…':'保存编辑'}</button></div>
-       <details><summary>编辑卡片短文与 Alt text</summary><p className="data-muted">超长卡片会指出具体页码。缩短文案后可重新下载，字号不会无限缩小。</p><div className="shareen-edit-grid">
-        <label className="shareen-edit-wide">总览标题<input value={copy.overview.headline} disabled={busy} onChange={event=>edit(previous=>({...previous,overview:{...previous.overview,headline:event.target.value}}))}/></label>
-        <label className="shareen-edit-wide">总览摘要<textarea value={copy.overview.summary} disabled={busy} onChange={event=>edit(previous=>({...previous,overview:{...previous.overview,summary:event.target.value}}))}/></label>
+       <details><summary>编辑卡片短文与 Alt text</summary><p className="data-muted">总览固定两行标题，不再生成摘要；焦点正文仅保留事件说明和相关性。超长卡片会指出具体页码，缩短文案后可下载。</p><div className="shareen-edit-grid">
         {copy.overview.topics.map((topic,index)=><label key={topic.id}>日榜 {index+1} · 英文短标题<input value={topic.title} disabled={busy} onChange={event=>edit(previous=>({...previous,overview:{...previous.overview,topics:previous.overview.topics.map(item=>item.id===topic.id?{...item,title:event.target.value}:item)}}))}/></label>)}
-        {copy.highlights.map((highlight,index)=><div className="shareen-edit-wide" key={highlight.topicId}><h4>{shareEnCardIdentity(report,copy,index+1)}</h4><div className="shareen-edit-grid">{([['hook','标题'],['whatHappened','What happened'],['context','The context'],['whyItMatters','Why it matters']] as const).map(([field,label])=><label key={field}>{label}<textarea value={highlight[field]} disabled={busy} onChange={event=>edit(previous=>({...previous,highlights:previous.highlights.map(item=>item.topicId===highlight.topicId?{...item,[field]:event.target.value}:item)}))}/></label>)}</div></div>)}
+        {copy.highlights.map((highlight,index)=><div className="shareen-edit-wide" key={highlight.topicId}><h4>{shareEnCardIdentity(report,copy,index+1)}</h4><label className="data-check"><input type="checkbox" checked={highlight.hideImage??false} disabled={busy} onChange={event=>edit(previous=>({...previous,highlights:previous.highlights.map(item=>item.topicId===highlight.topicId?{...item,hideImage:event.target.checked}:item)}))}/>隐藏配图，使用纯文字布局</label><label>配图 URL（留空使用原话题封面）<input type="url" placeholder="https://…" value={highlight.imageUrl??''} disabled={busy} onChange={event=>edit(previous=>({...previous,highlights:previous.highlights.map(item=>item.topicId===highlight.topicId?{...item,imageUrl:event.target.value}:item)}))}/></label><p className="data-muted">使用现有图片代理支持的来源域名；缺图或加载失败会直接收起图片区，情绪条仍保留。</p><div className="shareen-edit-grid">{([['hook','标题'],['whatHappened','What happened'],['whyItMatters','Why it matters']] as const).map(([field,label])=><label key={field}>{label}<textarea value={highlight[field]} disabled={busy} onChange={event=>edit(previous=>({...previous,highlights:previous.highlights.map(item=>item.topicId===highlight.topicId?{...item,[field]:event.target.value}:item)}))}/></label>)}</div><BattleEditor report={report} copy={copy} index={index} disabled={busy} onChange={battle=>edit(previous=>({...previous,highlights:previous.highlights.map(item=>item.topicId===highlight.topicId?{...item,battle}:item)}))}/></div>)}
         {copy.altTexts.map((text,index)=><label key={index}>卡片 {String(index+1).padStart(2,'0')} · Alt text<textarea value={text} disabled={busy} onChange={event=>edit(previous=>({...previous,altTexts:previous.altTexts.map((item,i)=>i===index?event.target.value:item)}))}/></label>)}
        </div><button type="button" disabled={busy||!dirty||conflict} onClick={save}>保存卡片与配文</button></details>
       </section>

@@ -32,3 +32,14 @@ test('card fitting switches to compact layout only when needed', () => {
 test('oversized cards fail with exact card identity instead of exporting clipped content', () => {
  assert.throws(()=>fitShareEnCard(measuredCard(200,150), '03 · original rank #7'), /03 · original rank #7.*1200 × 1500/);
 });
+
+test('poster images decode before export; failed and timed-out covers become explicit text editions',async()=>{
+ const {waitForPosterImages}=await import('../src/lib/share-export');
+ let failures=0;
+ const ready={complete:true,naturalWidth:100,decode:async()=>{},dispatchEvent:()=>{failures++;}};
+ const broken={complete:true,naturalWidth:0,decode:async()=>{},dispatchEvent:()=>{failures++;}};
+ const slow={complete:false,naturalWidth:0,decode:()=>new Promise(()=>{}),dispatchEvent:()=>{failures++;}};
+ const root={querySelectorAll:()=>[ready,broken,slow]} as unknown as HTMLElement;
+ assert.equal(await waitForPosterImages(root,10),2);
+ assert.equal(failures,2);
+});

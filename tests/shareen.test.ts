@@ -39,7 +39,7 @@ test('ShareEn uses original Top3 for every branded candidate while highlights ke
    assert.throws(()=>validateShareEn({...copy,overview:{...copy.overview,topics:[...copy.overview.topics].reverse()}},report),/identity|order/i);
    assert.throws(()=>validateShareEn({...copy,highlights:[copy.highlights[0],copy.highlights[0]]},report),/duplicate/i);
    assert.throws(()=>validateShareEn({...copy,top3:copy.top3.slice(1)},report),/top3/i);
-   assert.throws(()=>validateShareEn({...copy,highlights:[{...copy.highlights[0],context:''},copy.highlights[1]]},report),/context/i);
+   assert.throws(()=>validateShareEn({...copy,highlights:[{...copy.highlights[0],whatHappened:''},copy.highlights[1]]},report),/whatHappened/i);
    assert.throws(()=>validateShareEn({...copy,posts:copy.posts.map(p=>({...p,text:'Unbranded'}))},report),/brand/i);
   });
   await t.test('numerical differences and long natural English are advisory',()=>{
@@ -56,7 +56,7 @@ test('ShareEn uses original Top3 for every branded candidate while highlights ke
   });
   await t.test('invalid structure gets one corrective retry and no more',async()=>{
    let attempts=0;
-   globalThis.fetch=async()=>{attempts++;return Response.json({choices:[{message:{content:JSON.stringify(attempts===1?{...draft(),highlights:[]} : draft())}}]});};
+   globalThis.fetch=async()=>{attempts++;return Response.json({choices:[{message:{content:JSON.stringify(attempts===1?{...draft(),highlights:[]} : {highlightIds:draft().highlights.map(h=>h.topicId),topics:Object.fromEntries(draft().highlights.map(h=>[h.topicId,h]))})}}]});};
    assert.ok(await generateShareEn(report));assert.equal(attempts,2);
    attempts=0;globalThis.fetch=async()=>{attempts++;return Response.json({choices:[{message:{content:'{}'}}]});};
    assert.equal(await generateShareEn(report),undefined);assert.equal(attempts,2);

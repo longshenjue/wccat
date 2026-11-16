@@ -135,7 +135,7 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
   if(shareEn){
     if(!saveSharingFields(report,{shareEn},generation))throw new Error('ShareEn 保存失败：日报在生成期间已改变，请重新生成。');
     report.shareEn=shareEn;
-    log('info','ShareEn 已保存，可在管理员“分享制作”下载');
+    log('info','ShareEn 文案已保存；请在管理员“分享制作”检查配图和排版后下载');
   }else log('warn','日报已保存，ShareEn 暂未就绪，可在管理员“分享制作”重新生成');
   log('info', `日报生成结束：${reportDate}，${topics.length} 个话题`);
   return report;

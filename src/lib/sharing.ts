@@ -44,6 +44,7 @@ export async function generateSharing(reportDate:string,options:{format?:Sharing
    if(sourceFingerprint(current)!==fingerprint)throw new Error('Daily report changed during ShareEn generation; retry with the latest source.');
    if(shareEn&&JSON.stringify(current.shareEn)===JSON.stringify(baseline.shareEn)){
     if(!saveSharingFields(baseline,{shareEn},generation))throw new Error('Daily report changed during ShareEn generation.');
+    options.log?.('info','ShareEn 文案已保存；配图加载与图片排版将在预览/导出时检查');
    }else if(shareEn)options.log?.('warn','ShareEn 在生成期间已更新，保留最新版本');
    else options.log?.('warn','ShareEn 未生成，保留已有版本');
    report=requireReport(reportDate);

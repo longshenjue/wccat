@@ -1,6 +1,8 @@
 import type {WccatDailyReport} from './daily-report';
 import type {ShareEnCopy} from './shareen-types';
 import {numericalFacts,sameNumericalFacts} from './translation-facts';
+import {parseAllowedImageUrl} from './image-proxy';
+import {normaliseShareEnBattle} from './shareen-battle';
 
 export type ShareEnValidationOptions={onWarning?:(message:string)=>void};
 function record(value:unknown,path:string):Record<string,unknown>{
@@ -39,7 +41,15 @@ export function validateShareEnStructure(value:unknown,report:WccatDailyReport,o
   const h=record(item,`highlights[${index}]`);
   if(typeof h.topicId!=='string'||!expected.some(t=>t.id===h.topicId))throw new Error('Unknown highlight topic identity');
   if(ids.has(h.topicId))throw new Error('Duplicate highlight topic');ids.add(h.topicId);
-  return {topicId:h.topicId,hook:text(h.hook,'highlight.hook'),whatHappened:text(h.whatHappened,'highlight.whatHappened'),context:text(h.context,'highlight.context'),whyItMatters:text(h.whyItMatters,'highlight.whyItMatters')};
+  let imageUrl:string|undefined;
+  if(h.imageUrl!==undefined&&h.imageUrl!==''){
+   if(typeof h.imageUrl!=='string')throw new Error('Invalid highlight image URL');
+   try{imageUrl=parseAllowedImageUrl(h.imageUrl.trim()).href;}catch{throw new Error('Unapproved highlight image URL');}
+  }
+  if(h.hideImage!==undefined&&typeof h.hideImage!=='boolean')throw new Error('Invalid hideImage option');
+  const battle=h.battle===undefined?undefined:normaliseShareEnBattle(h.battle,report,h.topicId);
+  if(h.battle!==undefined&&!battle)options.onWarning?.('ShareEn optional debate content omitted; article remains usable.');
+  return {...(imageUrl?{imageUrl}:{}),...(h.hideImage!==undefined?{hideImage:h.hideImage}:{}),...(battle?{battle}:{}),topicId:h.topicId,hook:text(h.hook,'highlight.hook'),whatHappened:text(h.whatHappened,'highlight.whatHappened'),context:typeof h.context==='string'?h.context.trim():'',whyItMatters:text(h.whyItMatters,'highlight.whyItMatters')};
  });
  const top3=list(data.top3,'top3'),top=originalTop3(report);
  if(top3.length!==top.length)throw new Error('Incomplete top3 summaries');
@@ -64,12 +74,12 @@ export function validateShareEnStructure(value:unknown,report:WccatDailyReport,o
  if(!postIds.has(selectedPostId))throw new Error('Unknown selectedPostId');
  const altTexts=list(data.altTexts,'altTexts');
  if(altTexts.length!==highlights.length+1)throw new Error('Incomplete card altTexts');
- const checked:ShareEnCopy={version:1,generatedAt,model,sourceFingerprint:fingerprint,overview:{headline:text(overview.headline,'overview.headline'),summary:text(overview.summary,'overview.summary'),topics:checkedTopics},highlights:checkedHighlights,top3:checkedTop3,posts:checkedPosts,selectedPostId,altTexts:altTexts.map((t,i)=>text(t,`altTexts[${i}]`))};
+ const checked:ShareEnCopy={version:1,generatedAt,model,sourceFingerprint:fingerprint,overview:{headline:text(overview.headline,'overview.headline'),summary:typeof overview.summary==='string'?overview.summary.trim():'',topics:checkedTopics},highlights:checkedHighlights,top3:checkedTop3,posts:checkedPosts,selectedPostId,altTexts:altTexts.map((t,i)=>text(t,`altTexts[${i}]`))};
  const sourceText=[report.headline,report.overview,...report.topics.map(t=>[t.title,t.oneLine,t.whyItMatters].join(' '))].join(' ');
  const englishText=[checked.overview.headline,checked.overview.summary,...checked.overview.topics.map(t=>t.title),...checked.highlights.flatMap(h=>[h.hook,h.whatHappened,h.context,h.whyItMatters])].join(' ');
  try{
   if(!sameNumericalFacts(numericalFacts(sourceText),numericalFacts(englishText)))options.onWarning?.('ShareEn numerical wording differs from source; accepted without retry.');
  }catch{options.onWarning?.('ShareEn numerical wording could not be compared; accepted without retry.');}
- if(checked.overview.summary.split(/\s+/).length>45||checked.highlights.some(h=>[h.whatHappened,h.context,h.whyItMatters].join(' ').split(/\s+/).length>100))options.onWarning?.('ShareEn copy exceeds target card budget; check the fixed-size preview before export.');
+ if(checked.overview.summary.split(/\s+/).length>45||checked.highlights.some(h=>[h.whatHappened,h.whyItMatters].join(' ').split(/\s+/).length>70))options.onWarning?.('ShareEn copy exceeds target card budget; check the fixed-size preview before export.');
  return checked;
 }

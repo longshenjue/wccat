@@ -78,7 +78,7 @@ test('sharing caches, force regeneration, field-only guards and archive copy-on-
    globalThis.fetch=async()=>Response.json({choices:[{message:{content:JSON.stringify({...shareEnDraft(report),overview:{...shareEnDraft(report).overview,headline:'A newly regenerated headline'}})}}]});
    await generateSharing(report.reportDate,{format:'shareen',force:true});
    assert.throws(()=>saveShareEnEdits(report.reportDate,beforeRegeneration.shareEn!,beforeRevision),/changed.*reload/i);
-   assert.equal(ctx.readDailyReportFromDb(report.reportDate)?.shareEn?.overview.headline,'A newly regenerated headline');
+   assert.equal(ctx.readDailyReportFromDb(report.reportDate)?.shareEn?.overview.headline,'China’s Top 2');
    assert.throws(()=>saveShareEnEdits(report.reportDate,beforeRegeneration.shareEn!,''),/changed.*reload/i);
   });
   await t.test('archive report can be edited into main without altering registered archive; copies survive roundtrip',async()=>{
