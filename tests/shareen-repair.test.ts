@@ -7,9 +7,9 @@ import {shareEnDraft} from './helpers/shareen-fixture';
 const report=fixture('2026-11-15');
 report.topics=Array.from({length:10},(_,i)=>({...report.topics[0],id:`topic-${i+1}`,rank:i+1,title:`中文话题${i+1}`}));
 delete report.shareEnglish;
-function keyed(){return {topics:Object.fromEntries(report.topics.map(t=>[t.id,{title:`Concrete story ${t.rank}`,hook:`Story ${t.rank} explained`,whatHappened:'The supplied report describes this event and its background.',whyItMatters:'It may help overseas readers understand the discussion.'}])),highlightIds:['topic-8','topic-1','topic-3'],posts:[{id:'digest',template:'daily_digest',text:'Today on the Chinese internet.',reason:'Three concrete stories'},{id:'bridge',template:'global_bridge',text:'China, in context.',reason:'For readers abroad'}],selectedPostId:'digest'};}
+function keyed(){return {topics:Object.fromEntries(report.topics.map(t=>[t.id,{title:`Concrete story ${t.rank}`,hook:`Story ${t.rank} explained`,whatHappened:'The supplied report describes this event and its background.',whyItMatters:'It may help overseas readers understand the discussion.',battle:{redLabel:'Demand accountability',blueLabel:'Wait for evidence',redRationale:'Critics want a clear explanation.',blueRationale:'Others want to verify the report.',redScore:40,blueScore:60}}])),highlightIds:['topic-8','topic-1','topic-3'],posts:[{id:'digest',template:'daily_digest',text:'Today on the Chinese internet.',reason:'Three concrete stories'},{id:'bridge',template:'global_bridge',text:'China, in context.',reason:'For readers abroad'}],selectedPostId:'digest'};}
 
-test('ShareEn repairs only missing fields and reuses original-rank titles for captions',async(t)=>{
+test('ShareEn repairs only missing fields and reuses selected-topic titles for captions',async(t)=>{
  const oldFetch=globalThis.fetch,oldKey=process.env.DEEPSEEK_API_KEY;
  process.env.DEEPSEEK_API_KEY='test-field-repair';
  try{
@@ -19,7 +19,7 @@ test('ShareEn repairs only missing fields and reuses original-rank titles for ca
    assert.ok(copy);assert.equal(calls,1);
    assert.deepEqual(copy.overview.topics.map(t=>t.id),report.topics.map(t=>t.id));
    assert.equal(copy.overview.headline,"China’s Top 10");assert.equal(copy.overview.summary,'');
-   assert.deepEqual(copy.top3.map(t=>t.summary),['Concrete story 1','Concrete story 2','Concrete story 3']);
+   assert.deepEqual(copy.top3.map(t=>t.summary),['Concrete story 8','Concrete story 1','Concrete story 3']);
    assert.deepEqual(copy.highlights.map(h=>h.topicId),['topic-8','topic-1','topic-3']);
    assert.equal(copy.altTexts.length,4);
   });
@@ -47,7 +47,7 @@ test('ShareEn repairs only missing fields and reuses original-rank titles for ca
    assert.match(repairPrompt,/repair/i);assert.match(repairPrompt,/topic-2/);assert.match(repairPrompt,/whatHappened/);
   });
   await t.test('unknown extras do not erase valid keyed copy or force another full draft',async()=>{
-   const initial=keyed();initial.topics['not-a-source-id']={title:'An unrelated extra',hook:'Extra hook',whatHappened:'Extra content.',whyItMatters:'Extra rationale.'};
+   const initial=keyed();initial.topics['not-a-source-id']={title:'An unrelated extra',hook:'Extra hook',whatHappened:'Extra content.',whyItMatters:'Extra rationale.',battle:initial.topics['topic-1'].battle};
    let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({choices:[{message:{content:JSON.stringify(initial)}}]});};
    const copy=await generateShareEn(report);assert.ok(copy);assert.equal(calls,1);
    assert.deepEqual(copy.overview.topics.map(t=>t.id),report.topics.map(t=>t.id));assert.equal(copy.overview.topics[0].title,'Concrete story 1');

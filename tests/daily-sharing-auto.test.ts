@@ -3,8 +3,12 @@ import assert from 'node:assert/strict';
 import {snapshot,report,testDatabase} from './helpers/data-fixtures';
 import sharp from 'sharp';
 import {shareEnDraft} from './helpers/shareen-fixture';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {ShareEnPoster} from '../src/components/shareen-poster';
+import {shareEnTextFiles} from '../src/lib/share-export';
 
-test('daily generation automatically saves ShareEn and original Top3 branded captions',async()=>{
+test('daily generation saves aligned focus captions and repaired emotional strips for preview and export',async()=>{
  const db=await testDatabase(),previousKey=process.env.DEEPSEEK_API_KEY,previousFetch=globalThis.fetch;
  process.env.DEEPSEEK_API_KEY='test-auto-sharing-key';
  try{
@@ -22,8 +26,14 @@ test('daily generation automatically saves ShareEn and original Top3 branded cap
    const body=JSON.parse(String(init.body));
    if(body.max_tokens===1600){phases.push('vision');return new Response('',{status:503});}
    if(body.max_tokens===6500){
+    const request=JSON.parse(body.messages[1].content);
+    if(request.repairs){
+     phases.push('shareen-repair');
+     const battle={redLabel:'Demand accountability',blueLabel:'Wait for evidence',redRationale:'Critics want a clear explanation.',blueRationale:'Others want to verify the report.',redScore:80,blueScore:20};
+     return Response.json({choices:[{message:{content:JSON.stringify({topics:Object.fromEntries(request.repairs.filter((r:{field:string})=>r.field==='battle').map((r:{topicId:string})=>[r.topicId,{battle}]))})}}]});
+    }
     phases.push('shareen');
-    const source=JSON.parse(body.messages[1].content),draft=shareEnDraft(source);
+    const source=request,draft=shareEnDraft(source,{omitBattle:true});
     if(reselect)draft.highlights=[draft.highlights[1],{...draft.highlights[2],topicId:source.topics[3].id},draft.highlights[0]];
     return Response.json({choices:[{message:{content:JSON.stringify(draft)}}]});
    }
@@ -36,11 +46,17 @@ test('daily generation automatically saves ShareEn and original Top3 branded cap
   };
   const {generateDailyReport}=await import('../src/lib/daily-report');
   const daily=await generateDailyReport(new Date('2025-11-14T02:00:00+08:00'));
-  assert.deepEqual(phases,['chinese','english','shareen','photo','vision']);
+  assert.deepEqual(phases,['chinese','english','shareen','shareen-repair','photo','vision']);
   assert.equal(daily.reportDate,'2025-11-13');assert.ok(daily.shareEnglish);assert.ok(daily.shareEn);
   const saved=db.readDailyReportFromDb('2025-11-13')!;
   assert.equal(saved.shareEn?.highlights.length,3);assert.equal(saved.headline,'中文日报');
   assert.ok(saved.shareEn?.highlights[0].imageAsset?.dataBase64);
+  assert.equal(saved.shareEn!.captionBasis,'highlights');
+  assert.ok(saved.shareEn!.highlights.every(h=>h.battle?.basis==='analysis'));
+  const rendered=saved.shareEn!.highlights.map((_,i)=>renderToStaticMarkup(createElement(ShareEnPoster,{report:saved,copy:saved.shareEn!,index:i+1}))).join('');
+  assert.equal((rendered.match(/aria-label="Emotional opposition"/g)??[]).length,3);
+  const exportedAlt=new TextDecoder().decode(shareEnTextFiles(saved,saved.shareEn!).find(f=>f.name==='alt-text.txt')!.data);
+  assert.equal((exportedAlt.match(/Debate energy/g)??[]).length,3);
   const text=saved.shareEn!.posts[0].text;
   assert.match(text,/^WcCAT Daily Hot/);
   for(let index=0;index<3;index++)assert.ok(text.includes(['1️⃣','2️⃣','3️⃣'][index]+' '+saved.shareEn!.top3[index].summary));
@@ -56,6 +72,8 @@ test('daily generation automatically saves ShareEn and original Top3 branded cap
   reselect=true;phases.length=0;photoUrls.length=0;
   const repeated=await generateDailyReport(new Date('2025-11-14T02:00:00+08:00'));
   const [kept,newSelection,stillHidden]=repeated.shareEn!.highlights;
+  assert.deepEqual(repeated.shareEn!.top3.map(row=>row.topicId),repeated.shareEn!.highlights.map(row=>row.topicId));
+  assert.ok(repeated.shareEn!.highlights.every(h=>h.battle));
   assert.equal(stillHidden.topicId,hidden.topicId);assert.equal(stillHidden.hideImage,true);
   assert.equal(kept.topicId,replaced.topicId);assert.equal(kept.imageUrl,replaced.imageUrl);
   assert.deepEqual(kept.imageAsset,replacement);

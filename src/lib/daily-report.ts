@@ -133,7 +133,7 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
     report.shareEnglish=shareEnglish;
     log('info', '英文分享内容已保存');
   } else log('warn', '中文已生成，英文未就绪');
-  log('info', '正在生成 ShareEn 海外分享卡片与 TOP3 英文配文');
+  log('info', '正在生成 ShareEn 海外分享卡片、情绪对抗条与焦点英文配文');
   const shareEn=await generateShareEn(report,log);
   if(shareEn){
     const withAssets=restoreGeneratedImages(report,shareEn,previous);

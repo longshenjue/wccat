@@ -85,7 +85,8 @@ layout. The processed WebP files travel with the SQLite daily archive. In 分享
 selected photo. Previews and downloads reuse saved images without calling AI.
 
 ShareEn includes the original Top10, 2–3 overseas-relevant deep dives and branded
-English captions with numbered summaries of the original daily Top3. Failed
+English captions with numbered summaries matching those focus cards in order.
+Daily generation also checks and repairs missing emotional opposition text. Failed
 regeneration preserves existing usable sharing copy. For an older report:
 
 ```bash

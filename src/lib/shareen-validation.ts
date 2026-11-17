@@ -4,6 +4,7 @@ import {numericalFacts,sameNumericalFacts} from './translation-facts';
 import {parseAllowedImageUrl,isGeneratedImageUrl} from './image-proxy';
 import {normaliseShareEnBattle} from './shareen-battle';
 import {validateImageAsset} from './shareen-image-types';
+import {readShareEnCaptionLine} from './shareen-caption';
 
 export type ShareEnValidationOptions={onWarning?:(message:string)=>void};
 function record(value:unknown,path:string):Record<string,unknown>{
@@ -61,7 +62,8 @@ export function validateShareEnStructure(value:unknown,report:WccatDailyReport,o
   if(h.battle!==undefined&&!battle)options.onWarning?.('ShareEn optional debate content omitted; article remains usable.');
   return {...(imageAsset?{imageAsset}:{}),...(imageUrl?{imageUrl}:{}),...(hideImage!==undefined?{hideImage}:{}),...(battle?{battle}:{}),topicId:h.topicId,hook:text(h.hook,'highlight.hook'),whatHappened:text(h.whatHappened,'highlight.whatHappened'),context:typeof h.context==='string'?h.context.trim():'',whyItMatters:text(h.whyItMatters,'highlight.whyItMatters')};
  });
- const top3=list(data.top3,'top3'),top=originalTop3(report);
+ if(data.captionBasis!==undefined&&data.captionBasis!=='highlights')throw new Error('Unknown caption basis');
+ const top3=list(data.top3,'top3'),top=data.captionBasis==='highlights'?checkedHighlights.map(h=>expected.find(t=>t.id===h.topicId)!):originalTop3(report);
  if(top3.length!==top.length)throw new Error('Incomplete top3 summaries');
  const checkedTop3=top3.map((item,index)=>{
   const t=record(item,`top3[${index}]`);
@@ -76,7 +78,10 @@ export function validateShareEnStructure(value:unknown,report:WccatDailyReport,o
   if(postIds.has(id))throw new Error('Duplicate post identity');postIds.add(id);
   const body=text(p.text,'post.text');
   if(!/^WcCAT Daily Hot:?(?: 🇨🇳)?\r?\n/u.test(body))throw new Error('Missing WcCAT post branding');
-  checkedTop3.forEach((t,i)=>{if(!body.includes(`${['1️⃣','2️⃣','3️⃣'][i]} ${t.summary}`))throw new Error('Missing original Top3 in post');});
+  if(data.captionBasis==='highlights'){
+   const numbered=body.split(/\r?\n/u).flatMap(line=>{const entry=readShareEnCaptionLine(line);return entry?[entry]:[];});
+   if(numbered.length!==checkedTop3.length||checkedTop3.some((t,i)=>numbered[i].position!==i+1||numbered[i].summary!==t.summary))throw new Error('Changed Top3 caption identity/order or summary');
+  }else checkedTop3.forEach((t,i)=>{if(!body.includes(`${['1️⃣','2️⃣','3️⃣'][i]} ${t.summary}`))throw new Error('Missing original Top3 in post');});
   if(!/WcCAT[^\n]*(cards|read|context|follow)/i.test(body.split('\n').at(-1)??''))throw new Error('Missing WcCAT reading CTA');
   return {id,template:text(p.template,'post.template',false),text:body,reason:text(p.reason,'post.reason',false)};
  });
@@ -84,7 +89,7 @@ export function validateShareEnStructure(value:unknown,report:WccatDailyReport,o
  if(!postIds.has(selectedPostId))throw new Error('Unknown selectedPostId');
  const altTexts=list(data.altTexts,'altTexts');
  if(altTexts.length!==highlights.length+1)throw new Error('Incomplete card altTexts');
- const checked:ShareEnCopy={version:1,generatedAt,model,sourceFingerprint:fingerprint,overview:{headline:text(overview.headline,'overview.headline'),summary:typeof overview.summary==='string'?overview.summary.trim():'',topics:checkedTopics},highlights:checkedHighlights,top3:checkedTop3,posts:checkedPosts,selectedPostId,altTexts:altTexts.map((t,i)=>text(t,`altTexts[${i}]`))};
+ const checked:ShareEnCopy={version:1,generatedAt,model,sourceFingerprint:fingerprint,...(data.captionBasis==='highlights'?{captionBasis:'highlights' as const}:{}),overview:{headline:text(overview.headline,'overview.headline'),summary:typeof overview.summary==='string'?overview.summary.trim():'',topics:checkedTopics},highlights:checkedHighlights,top3:checkedTop3,posts:checkedPosts,selectedPostId,altTexts:altTexts.map((t,i)=>text(t,`altTexts[${i}]`))};
  const sourceText=[report.headline,report.overview,...report.topics.map(t=>[t.title,t.oneLine,t.whyItMatters].join(' '))].join(' ');
  const englishText=[checked.overview.headline,checked.overview.summary,...checked.overview.topics.map(t=>t.title),...checked.highlights.flatMap(h=>[h.hook,h.whatHappened,h.context,h.whyItMatters])].join(' ');
  try{

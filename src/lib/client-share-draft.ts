@@ -1,5 +1,6 @@
 import type { WccatDailyReport } from './daily-report';
 import type { ShareEnCopy } from './shareen-types';
+import { readShareEnCaptionLine } from './shareen-caption';
 
 export type SharingDraft = {date:string;copy?:ShareEnCopy;baseReport:WccatDailyReport|null;dirty:boolean;conflict:boolean;expectedRevision:string};
 
@@ -16,12 +17,12 @@ export function reconcileSharingDraft(previous:SharingDraft|undefined,date:strin
  return {date,copy:report?.shareEn,baseReport:report,dirty:false,conflict:false,expectedRevision};
 }
 
-/** Keep editable original-rank summaries and every post candidate in agreement. */
+/** Keep editable caption summaries and every post candidate in agreement. */
 export function updateShareEnTop3(copy:ShareEnCopy,index:number,summary:string):ShareEnCopy {
  if(!copy.top3[index])return copy;
  const top3=copy.top3.map((topic,i)=>i===index?{...topic,summary}:topic);
  const numbered=top3.map((topic,i)=>`${['1️⃣','2️⃣','3️⃣'][i]} ${topic.summary.trim()}`);
- const isNumbered=(line:string)=>/^(?:1️⃣|2️⃣|3️⃣)(?:\s|$)/u.test(line);
+ const isNumbered=(line:string)=>copy.captionBasis==='highlights'?!!readShareEnCaptionLine(line):/^(?:1️⃣|2️⃣|3️⃣)(?:\s|$)/u.test(line);
  const posts=copy.posts.map(post=>{
   const lines=post.text.split('\n');
   const start=lines.findIndex(isNumbered);
@@ -30,7 +31,7 @@ export function updateShareEnTop3(copy:ShareEnCopy,index:number,summary:string):
    updated.splice(start,0,...numbered);
    return {...post,text:updated.join('\n')};
   }
-  // An incomplete free-text edit can be repaired from the original-rank fields.
+  // An incomplete free-text edit can be repaired from the caption summary fields.
   const cta=lines.findIndex(line=>/^WcCAT:/u.test(line));
   lines.splice(cta>=0?cta:lines.length,0,'',...numbered,'');
   return {...post,text:lines.join('\n')};

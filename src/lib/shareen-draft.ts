@@ -1,6 +1,7 @@
 import type {WccatDailyReport} from './daily-report';
 import type {ShareEnCopy} from './shareen-types';
-import {normaliseShareEnBattle,resolveShareEnBattle} from './shareen-battle';
+import {normaliseShareEnBattle,resolveShareEnBattle,hasSourceShareEnBattle} from './shareen-battle';
+import {readShareEnCaptionLine} from './shareen-caption';
 
 type Fields=Record<string,unknown>;
 export type ShareEnDraftState={topics:Record<string,Fields>;highlightIds:unknown;posts:unknown;selectedPostId:unknown;top3:unknown};
@@ -64,7 +65,8 @@ export function shareEnRepairs(state:ShareEnDraftState,report:WccatDailyReport):
    if(!isEnglish(value))repairs.push({topicId:id,field,required:true,reason:'Missing or non-English content'});
    else if(words(value)>budget)repairs.push({topicId:id,field,required:false,reason:`Shorten to at most ${budget} words for the image card; preserve the meaning`});
   }
-  if(state.topics[id]?.battle!==undefined&&!resolveShareEnBattle(report,id,state.topics[id].battle))repairs.push({topicId:id,field:'battle',required:false,reason:'Provide two compact English attitude labels and short explanations; use the existing scores if available, otherwise an editorial estimate'});
+  const battle=state.topics[id]?.battle;
+  if(!resolveShareEnBattle(report,id,battle)&&(battle!==null||hasSourceShareEnBattle(report,id)))repairs.push({topicId:id,field:'battle',required:false,reason:hasSourceShareEnBattle(report,id)?'Translate the supplied source battle into compact English labels and explanations, preserving both sides and their source scores':'Provide compact English attitudes and a cautious relative energy estimate supported by source cues, or explicitly return null if there is insufficient evidence; never invent a split'});
  }
  return repairs;
 }
@@ -75,7 +77,11 @@ export function applyShareEnRepair(state:ShareEnDraftState,value:unknown,repairs
  const next={...state,topics:Object.fromEntries(Object.entries(state.topics).map(([id,item])=>[id,{...item}]))};
  for(const repair of repairs)if(repair.topicId){
   const value=object(topics[repair.topicId])[repair.field];
-  if(repair.field==='battle'){const battle=normaliseShareEnBattle(value,report,repair.topicId);if(battle)next.topics[repair.topicId].battle=battle;}
+  if(repair.field==='battle'){
+   const battle=normaliseShareEnBattle(value,report,repair.topicId);
+   if(battle)next.topics[repair.topicId].battle=battle;
+   else if(value===null&&!hasSourceShareEnBattle(report,repair.topicId))next.topics[repair.topicId].battle=null;
+  }
   else if(isEnglish(value))next.topics[repair.topicId][repair.field]=value;
  }
  if(repairs.some(r=>r.field==='highlightIds')){
@@ -84,7 +90,13 @@ export function applyShareEnRepair(state:ShareEnDraftState,value:unknown,repairs
    next.highlightIds=ids;
    for(const id of ids as string[])for(const field of fields){
     const value=object(topics[id])[field];
-    if(field==='battle'){const battle=normaliseShareEnBattle(value,report,id);if(!resolveShareEnBattle(report,id,next.topics[id].battle)&&battle)next.topics[id].battle=battle;}
+    if(field==='battle'){
+     if(!resolveShareEnBattle(report,id,next.topics[id].battle)){
+      const battle=normaliseShareEnBattle(value,report,id);
+      if(battle)next.topics[id].battle=battle;
+      else if(value===null&&!hasSourceShareEnBattle(report,id))next.topics[id].battle=null;
+     }
+    }
     else if(!isEnglish(next.topics[id][field])&&isEnglish(value))next.topics[id][field]=value;
    }
   }
@@ -98,19 +110,20 @@ export function completeShareEnDraft(state:ShareEnDraftState,report:WccatDailyRe
  const topics=originalTopics(report).map(t=>({id:t.id,title:clean(state.topics[t.id].title)}));
  const highlights=(state.highlightIds as string[]).map(topicId=>{const battle=resolveShareEnBattle(report,topicId,state.topics[topicId].battle);return {...(battle?{battle}:{}),topicId,hook:clean(state.topics[topicId].hook),whatHappened:clean(state.topics[topicId].whatHappened),context:'',whyItMatters:clean(state.topics[topicId].whyItMatters)};});
  const legacyTop3=Array.isArray(state.top3)?state.top3.map(object):[];
- const top3=[...originalTopics(report)].sort((a,b)=>a.rank-b.rank).slice(0,3).map(t=>{
-  const legacy=legacyTop3.filter(item=>item.topicId===t.id);
-  return {topicId:t.id,summary:legacy.length===1&&isEnglish(legacy[0].summary)?legacy[0].summary.trim():topics.find(item=>item.id===t.id)!.title};
+ const top3=highlights.map(h=>{
+  const legacy=legacyTop3.filter(item=>item.topicId===h.topicId);
+  const summary=legacy.length===1&&isEnglish(legacy[0].summary)?legacy[0].summary:topics.find(item=>item.id===h.topicId)!.title;
+  return {topicId:h.topicId,summary:summary.replace(/\s+/gu,' ').trim()};
  });
- const rawPosts=Array.isArray(state.posts)?state.posts.map(object).filter(p=>isEnglish(p.text)).slice(0,3):[];
- const defaults=[{id:'digest',template:'daily_digest',text:'Today on the Chinese internet.',reason:'Three stories from the original daily ranking.'},{id:'bridge',template:'global_bridge',text:'China’s daily trends, in context.',reason:'A brief introduction for readers abroad.'}];
+ const rawPosts=Array.isArray(state.posts)?state.posts.map(object).filter(p=>isEnglish(p.text)&&!p.text.split(/\r?\n/u).some(readShareEnCaptionLine)).slice(0,3):[];
+ const defaults=[{id:'digest',template:'daily_digest',text:'Today on the Chinese internet.',reason:'The stories featured in the focus cards.'},{id:'bridge',template:'global_bridge',text:'China’s daily trends, in context.',reason:'A brief introduction for readers abroad.'}];
  const candidates=[...rawPosts];
  while(candidates.length<2)candidates.push(defaults[candidates.length===0?0:1]);
  const seen=new Set<string>();
  const posts=candidates.map((p,index)=>{
   const proposed=typeof p.id==='string'&&p.id.trim()?p.id.trim():`post-${index+1}`;
   let id=proposed;while(seen.has(id))id=`${id}-${index+1}`;seen.add(id);
-  return {id,template:typeof p.template==='string'&&p.template.trim()?p.template.trim():'daily_digest',reason:typeof p.reason==='string'&&p.reason.trim()?p.reason.trim():'Original daily Top3.',text:`WcCAT Daily Hot\n\n${clean(p.text)}\n\n${top3.map((t,i)=>`${['1️⃣','2️⃣','3️⃣'][i]} ${t.summary}`).join('\n')}\n\nWcCAT: read the cards. CHINA, IN CONTEXT.`};
+  return {id,template:typeof p.template==='string'&&p.template.trim()?p.template.trim():'daily_digest',reason:typeof p.reason==='string'&&p.reason.trim()?p.reason.trim():'The selected focus stories.',text:`WcCAT Daily Hot\n\n${clean(p.text)}\n\n${top3.map((t,i)=>`${['1️⃣','2️⃣','3️⃣'][i]} ${t.summary}`).join('\n')}\n\nWcCAT: read the cards. CHINA, IN CONTEXT.`};
  });
- return {overview:{headline:`China’s Top ${topics.length}`,summary:'',topics},highlights,top3,posts,selectedPostId:typeof state.selectedPostId==='string'&&seen.has(state.selectedPostId)?state.selectedPostId:posts[0].id,altTexts:[`WcCAT Daily Hot, ${report.reportDate}. China’s Top ${topics.length}: ${topics.map(t=>t.title).join('; ')}.`,...highlights.map(h=>`${h.hook}. ${h.whatHappened} ${h.whyItMatters}${h.battle?` Debate energy (${h.battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${h.battle.redLabel} ${h.battle.redScore}, ${h.battle.blueLabel} ${h.battle.blueScore}. ${h.battle.redRationale} ${h.battle.blueRationale}`:''}`)]};
+ return {captionBasis:'highlights',overview:{headline:`China’s Top ${topics.length}`,summary:'',topics},highlights,top3,posts,selectedPostId:typeof state.selectedPostId==='string'&&seen.has(state.selectedPostId)?state.selectedPostId:posts[0].id,altTexts:[`WcCAT Daily Hot, ${report.reportDate}. China’s Top ${topics.length}: ${topics.map(t=>t.title).join('; ')}.`,...highlights.map(h=>`${h.hook}. ${h.whatHappened} ${h.whyItMatters}${h.battle?` Debate energy (${h.battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${h.battle.redLabel} ${h.battle.redScore}, ${h.battle.blueLabel} ${h.battle.blueScore}. ${h.battle.redRationale} ${h.battle.blueRationale}`:''}`)]};
 }

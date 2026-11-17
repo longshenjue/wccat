@@ -17,6 +17,12 @@ function pair(value:unknown):{redScore:number;blueScore:number}|undefined {
  const redScore=Math.round(r/(r+v)*100);return {redScore,blueScore:100-redScore};
 }
 
+/** Chinese source attitudes still need translation even when the model returns null. */
+export function hasSourceShareEnBattle(report:WccatDailyReport,topicId:string):boolean {
+ const value=report.topics.find(t=>t.id===topicId)?.aiAnalysis?.battle;
+ return !!pair(value)&&!!value&&[value.redLabel,value.blueLabel,value.redRationale,value.blueRationale].every(v=>typeof v==='string'&&!!v.trim());
+}
+
 /** Source scores win over editorial output; estimates never masquerade as existing analysis. */
 export function normaliseShareEnBattle(value:unknown,report:WccatDailyReport,topicId:string):ShareEnBattle|undefined {
  const topic=report.topics.find(t=>t.id===topicId);if(!topic)return undefined;
