@@ -111,4 +111,5 @@ export interface DailySnapshot {
   rawItems: RawHotItem[];
   topics: TopicGroup[];
   digest: DailyDigest;
+  evidenceRunIds?: string[];
 }

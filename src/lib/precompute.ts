@@ -37,6 +37,7 @@ export async function precomputeTopicAnalyses(snapshot: DailySnapshot, top?: num
   );
 
   for (const topic of topics) {
+    let attemptId:string|undefined;
     const existingAnalysis = existing[topic.id];
     if (existingAnalysis?.model === "local-rules") {
       console.log(`[WcCAT][AI] upgrading #${topic.rank} ${topic.title} from local-rules`);
@@ -50,7 +51,7 @@ export async function precomputeTopicAnalyses(snapshot: DailySnapshot, top?: num
         console.log(`[WcCAT][AI] anchoring #${topic.rank} to ${previous.snapshotDate}`);
       }
       const analysis = await analyzeTopicWithDeepSeek(topic, articleContexts, previousAnalysis, (trace) => {
-        saveAiAnalysisLogToDb(snapshot.date, topic.id, trace, generation);
+        attemptId=saveAiAnalysisLogToDb(snapshot.date, topic.id, trace, generation);
         console.log(
           `[WcCAT][AI] #${topic.rank} ${trace.provider}/${trace.model} ${trace.status} ${trace.durationMs}ms fallback=${trace.usedFallback}`
         );
@@ -58,7 +59,7 @@ export async function precomputeTopicAnalyses(snapshot: DailySnapshot, top?: num
           console.warn(`[WcCAT][AI] #${topic.rank} ${trace.error}`);
         }
       });
-      saveTopicAnalysisToDb(snapshot.date, topic.id, analysis, generation);
+      saveTopicAnalysisToDb(snapshot.date, topic.id, analysis, generation,snapshot.evidenceRunIds,{topic,attemptId});
       if (analysis.model === "local-rules") {
         console.warn(`[WcCAT] AI analysis unavailable for #${topic.rank} ${topic.title}; saved local-rules fallback. Retry with npm run analyze -- top=${safeLimit}`);
       } else {
@@ -66,7 +67,7 @@ export async function precomputeTopicAnalyses(snapshot: DailySnapshot, top?: num
       }
     } catch (error) {
       if (error instanceof MaintenanceError) throw error;
-      saveTopicAnalysisToDb(snapshot.date, topic.id, buildFallbackTopicAnalysis(topic), generation);
+      saveTopicAnalysisToDb(snapshot.date, topic.id, buildFallbackTopicAnalysis(topic), generation,snapshot.evidenceRunIds,{topic,attemptId});
       console.warn(`[WcCAT] analysis fallback for ${topic.title}`, error);
     }
   }

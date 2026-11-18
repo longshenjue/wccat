@@ -2,6 +2,7 @@ import {getDb,readDailyReportFromDb} from './db';
 import {guardedWrite} from './maintenance';
 import {sourceFingerprint} from './shareen';
 import type {WccatDailyReport} from './daily-report';
+import {sanitizeEvidence} from './evidence-content';
 
 type SharingFields=Partial<Pick<WccatDailyReport,'shareEnglish'|'shareEn'>>;
 /** Merge sharing fields into the CURRENT winner. Registered archive files stay read-only.
@@ -22,7 +23,7 @@ export function saveSharingFields(source:WccatDailyReport,fields:SharingFields,e
   database.prepare(`insert into daily_reports(report_date,generated_at,model,payload)
    values(@reportDate,@generatedAt,@model,@payload)
    on conflict(report_date) do update set generated_at=excluded.generated_at,model=excluded.model,payload=excluded.payload`)
-   .run({reportDate:current.reportDate,generatedAt:current.generatedAt,model:current.model,payload:JSON.stringify(merged)});
+   .run({reportDate:current.reportDate,generatedAt:current.generatedAt,model:current.model,payload:JSON.stringify(sanitizeEvidence(merged))});
   return true;
  },expectedGeneration);
 }

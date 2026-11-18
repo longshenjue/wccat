@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { saveTopicAnalysisToDb, writeGeneration } from "@/lib/db";
+import { saveTopicAnalysisToDb, saveAiAnalysisLogToDb, writeGeneration } from "@/lib/db";
+import {getChinaSnapshotId} from '@/lib/date';
 import { fetchArticleContexts } from "@/lib/fulltext";
 import { analyzeTopicWithDeepSeek } from "@/lib/topic-analysis";
 import type { TopicGroup } from "@/lib/types";
@@ -21,9 +22,12 @@ export async function POST(request: Request) {
     }
 
     const contexts = await fetchArticleContexts(topic.occurrences);
-    const analysis = await analyzeTopicWithDeepSeek(topic, contexts, undefined);
+    let attemptId:string|undefined;
+    const analysis = await analyzeTopicWithDeepSeek(topic, contexts, undefined,trace=>{
+      attemptId=saveAiAnalysisLogToDb(date??getChinaSnapshotId(),topic.id,trace,generation);
+    });
     if (date) {
-      saveTopicAnalysisToDb(date, topic.id, analysis, generation);
+      saveTopicAnalysisToDb(date, topic.id, analysis, generation,undefined,{topic,attemptId});
     }
 
     return NextResponse.json(analysis);

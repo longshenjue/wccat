@@ -14,7 +14,7 @@ test('persisted ShareEn images across generation, admin routes, edits and archiv
   const {generateSharing,saveShareEnEdits}=await import('../src/lib/sharing');
   const {shareEnRevision}=await import('../src/lib/shareen');
   const auth=await import('../src/lib/admin-auth');
-  process.env.DEEPSEEK_API_KEY='fixture';
+  process.env.DEEPSEEK_API_KEY='image-fixture-api-key-9b6d';
   process.env.WCCAT_ADMIN_PASSWORD_HASH=auth.hashAdminPassword('image-test-admin-password');
   process.env.WCCAT_ADMIN_SESSION_SECRET='image-test-secret-over-thirty-two-characters';
   const route=await import('../src/app/api/admin/share/route');
@@ -201,7 +201,7 @@ test('persisted ShareEn images across generation, admin routes, edits and archiv
    let done=getJob(job.id);
    for(let i=0;i<200&&['queued','running'].includes(done.status);i++){await new Promise(r=>setTimeout(r,30));done=getJob(job.id);}
    assert.ok(!['queued','running'].includes(done.status));
-   process.env.DEEPSEEK_API_KEY='fixture';
+   process.env.DEEPSEEK_API_KEY='image-fixture-api-key-9b6d';
    reset();globalThis.fetch=fetchImages;
    const id=randomUUID(),now=Date.now();
    db.getDb().prepare("insert into admin_jobs(id,kind,status,input,created_at,updated_at) values(?,'sharing','queued',?,?,?)").run(id,JSON.stringify({kind:'sharing',reportDate:report.reportDate,shareFormat:'images',topicId:'topic-1',force:true}),now,now);

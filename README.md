@@ -116,6 +116,15 @@ Run `npm test` for daily-window and translation-validation regression checks.
 
 ## Administrator data archives
 
+The long-term evidence library records source responses, document revisions,
+interaction observations and provider-specific search results in SQLite. Use
+`npm run evidence -- stats`, `npm run evidence -- backup`, and explicit
+`npm run evidence -- backfill --limit=5` for inspection, complete backups and
+historical backfill. See [evidence storage and recovery](docs/evidence-library.md)
+and [free source onboarding](docs/free-data-source-setup.md).
+Existing monthly full/daily archives contain the legacy six business tables;
+use the new complete backup command to include long-term evidence.
+
 Follow [administrator setup and archive recovery](docs/admin-data-archives.md).
 Run `npm run admin:password` to generate runtime administrator secrets, then
 visit `/admin`. The authenticated dashboard previews date ranges, exports full

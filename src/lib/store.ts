@@ -14,10 +14,19 @@ import { getActiveSources, SOURCES } from "./sources";
 import { buildDailyDigest, enrichDigestWithAI } from "./summary";
 import { enrichTopicImages } from "./image-enrichment";
 import type { DailySnapshot } from "./types";
+import {getDb} from './db';
+import {guardedWrite} from './maintenance';
+import {EvidenceStore} from './evidence-store';
+import {withEvidenceCapture} from './evidence-capture';
 
-export async function createDailySnapshot(date = getChinaSnapshotId()): Promise<DailySnapshot> {
+export async function createDailySnapshot(date = getChinaSnapshotId(),generation?:number): Promise<DailySnapshot> {
   const activeSources = getActiveSources();
-  const rawItems = await fetchAllSources(activeSources);
+  const evidenceRunIds:string[]=[];
+  const rawItems = await withEvidenceCapture(batch=>{
+    const db=getDb();
+    const recorded=guardedWrite(db,()=>new EvidenceStore(db).recordBatch({...batch,legacySnapshotDate:date}),generation);
+    evidenceRunIds.push(recorded.runId);
+  },()=>fetchAllSources(activeSources));
   const previousSnapshot = readPreviousSnapshotBeforeDateFromDb(date);
   const rankedTopics = applyRankSignals(buildTopicRanking(rawItems), previousSnapshot?.topics ?? []);
   const topics = await enrichTopicImages(rankedTopics);
@@ -29,7 +38,8 @@ export async function createDailySnapshot(date = getChinaSnapshotId()): Promise<
     sources: SOURCES,
     rawItems,
     topics,
-    digest
+    digest,
+    evidenceRunIds
   };
 }
 
@@ -39,7 +49,7 @@ export async function saveSnapshot(snapshot: DailySnapshot, generation?: number)
 
 export async function refreshSnapshot(date = getChinaSnapshotId()) {
   const generation = writeGeneration();
-  const snapshot = await createDailySnapshot(date);
+  const snapshot = await createDailySnapshot(date,generation);
   if (snapshot.rawItems.length === 0) {
     return readSnapshotFromDb(date) ?? readLatestSnapshotFromDb() ?? snapshot;
   }

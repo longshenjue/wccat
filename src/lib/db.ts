@@ -6,7 +6,10 @@ import {createBusinessSchema} from "./db-schema";
 import {ensureMaintenanceSchema,guardedWrite,readGeneration} from "./maintenance";
 import type { WccatDailyReport } from "./daily-report";
 import type { TopicAnalysis, TopicAnalysisTrace } from "./topic-analysis";
-import type { DailySnapshot } from "./types";
+import type { DailySnapshot,TopicGroup } from "./types";
+import {createEvidenceSchema} from './evidence-schema';
+import {recordSnapshotEvidence,recordLegacyAnalysis,recordAnalysisTrace} from './evidence-legacy';
+import {sanitizeEvidence} from './evidence-content';
 
 
 let db: Database.Database | undefined;
@@ -21,13 +24,15 @@ export function getDb() {
     db.pragma("foreign_keys = ON");
     createBusinessSchema(db);
     ensureMaintenanceSchema(db);
+    createEvidenceSchema(db);
   }
 
   return db;
 }
 
-export function saveSnapshotToDb(snapshot: DailySnapshot, expectedGeneration?: number) {
+export function saveSnapshotToDb(inputSnapshot: DailySnapshot, expectedGeneration?: number) {
   return guardedWrite(getDb(), () => {
+  const snapshot=sanitizeEvidence(inputSnapshot) as DailySnapshot;
   const database = getDb();
   const insertSnapshot = database.prepare(`
     insert into snapshots (date, generated_at, payload)
@@ -60,6 +65,7 @@ export function saveSnapshotToDb(snapshot: DailySnapshot, expectedGeneration?: n
   `);
 
   const write = database.transaction(() => {
+    recordSnapshotEvidence(database,snapshot);
     insertSnapshot.run({
       date: snapshot.date,
       generatedAt: snapshot.generatedAt,
@@ -129,8 +135,9 @@ export function readRecentSnapshotsFromDb(limit=24,beforeOrAt?:string):DailySnap
  });
 }
 
-export function saveDailyReportToDb(report: WccatDailyReport, expectedGeneration?: number) {
+export function saveDailyReportToDb(inputReport: WccatDailyReport, expectedGeneration?: number) {
   return guardedWrite(getDb(), () => {
+  const report=sanitizeEvidence(inputReport) as WccatDailyReport;
   getDb()
     .prepare(
       `
@@ -151,8 +158,9 @@ export function saveDailyReportToDb(report: WccatDailyReport, expectedGeneration
   }, expectedGeneration);
 }
 
-export function saveDailyShareEnglishToDb(report: WccatDailyReport, expectedGeneration?: number) {
+export function saveDailyShareEnglishToDb(inputReport: WccatDailyReport, expectedGeneration?: number) {
   return guardedWrite(getDb(), () => {
+  const report=sanitizeEvidence(inputReport) as WccatDailyReport;
   if (!report.shareEnglish) return false;
   // An older translation must not replace a report published by a newer CLI/worker run.
   const result = getDb().prepare(`
@@ -180,10 +188,14 @@ export function listDailyReportDatesFromDb() {
 export function saveTopicAnalysisToDb(
   snapshotDate: string,
   topicId: string,
-  analysis: TopicAnalysis,
-  expectedGeneration?: number
+  inputAnalysis: TopicAnalysis,
+  expectedGeneration?: number,
+  inputRunIds?: string[],
+  provenance?: {topic?:TopicGroup;attemptId?:string}
 ) {
   return guardedWrite(getDb(), () => {
+  const analysis=sanitizeEvidence(inputAnalysis) as TopicAnalysis;
+  recordLegacyAnalysis(getDb(),snapshotDate,topicId,analysis,inputRunIds,provenance);
   getDb()
     .prepare(
       `
@@ -222,14 +234,20 @@ export function readRecentTopicAnalysisBeforeDate(snapshotDate:string,topicId:st
  return chosen?{snapshotDate:chosen.snapshotDate,analysis:JSON.parse(chosen.payload) as TopicAnalysis}:null;
 }
 
+export function saveTopicAnalysisEvidenceToDb(snapshotDate:string,topicId:string,analysis:TopicAnalysis,expectedGeneration?:number,inputRunIds?:string[],provenance?:{topic?:TopicGroup;attemptId?:string}) {
+  return guardedWrite(getDb(),()=>recordLegacyAnalysis(getDb(),snapshotDate,topicId,analysis,inputRunIds,provenance),expectedGeneration);
+}
+
 export function saveAiAnalysisLogToDb(
   snapshotDate: string,
   topicId: string,
-  trace: TopicAnalysisTrace,
+  inputTrace: TopicAnalysisTrace,
   expectedGeneration?: number
 ) {
   return guardedWrite(getDb(), () => {
-  getDb()
+  const trace=sanitizeEvidence(inputTrace) as TopicAnalysisTrace;
+  const generatedAt=new Date().toISOString();
+  const inserted=getDb()
     .prepare(
       `
         insert into ai_analysis_logs (
@@ -253,8 +271,9 @@ export function saveAiAnalysisLogToDb(
       error: trace.error ?? null,
       requestPayload: JSON.stringify(trace.request),
       responsePayload: JSON.stringify(trace.response),
-      createdAt: new Date().toISOString()
+      createdAt: generatedAt
     });
+  return recordAnalysisTrace(getDb(),snapshotDate,topicId,trace,{legacyLogId:Number(inserted.lastInsertRowid),generatedAt});
   }, expectedGeneration);
 }
 

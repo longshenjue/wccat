@@ -7,7 +7,8 @@ import {shareEnDraft} from './helpers/shareen-fixture';
 
 test('sharing caches, force regeneration, field-only guards and archive copy-on-write',async(t)=>{
  const ctx=await testDatabase();const oldFetch=globalThis.fetch,oldKey=process.env.DEEPSEEK_API_KEY;
- process.env.DEEPSEEK_API_KEY='test';
+ // Credentials must not also be ordinary words used by the content assertions.
+ process.env.DEEPSEEK_API_KEY='sharing-fixture-api-key-7f2c';
  try{
   const {generateSharing,saveShareEnEdits}=await import('../src/lib/sharing');
   const {saveSharingFields}=await import('../src/lib/shareen-persistence');

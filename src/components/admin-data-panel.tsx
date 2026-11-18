@@ -102,6 +102,7 @@ export function AdminDataPanel(){
   </>:null}
   {tab==='overview'?<section className="data-card"><h2>管理工作台</h2><p className="data-muted">主库包含 {summary?.months.length??0} 个月份数据；业务日报保留，小时明细按需归档清理。</p><div className="admin-overview-links">{tabs.slice(1).map(([key,label])=><button key={key} onClick={()=>change({tab:key})}>{label} →</button>)}</div><h3>主库数据摘要</h3><div className="data-month-table"><table><thead><tr><th>月份</th><th>小时快照</th><th>日报</th></tr></thead><tbody>{summary?.months.map(month=><tr key={month.month}><td>{month.month}</td><td>{month.snapshots}</td><td>{month.reports}</td></tr>)}</tbody></table></div></section>:null}
   {tab==='storage'?<>
+  <p className="data-muted">此处月归档包含小时榜和日报六张业务表，不包含长期证据库。保存全部资料请在服务器执行 <code>npm run evidence -- backup</code>；清理小时记录会保留长期证据。</p>
   <div className="data-management-grid">
    <section className="data-card"><h2>选择数据范围</h2><p className="data-muted">日期均按北京时间计算，包含结束日期当天。最近48小时和最新小时记录不会被清理。</p><div className="data-range"><label>开始日期<input type="date" value={start} max={end} onChange={e=>setStart(e.target.value)}/></label><label>结束日期<input type="date" value={end} min={start} max={today} onChange={e=>setEnd(e.target.value)}/></label></div>
     <button disabled={disabled||!start||!end} onClick={()=>submit({action:'preview',range:{start,end}})} className="data-primary">生成范围预览</button>

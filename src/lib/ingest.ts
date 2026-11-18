@@ -1,5 +1,7 @@
 import type { EngagementStats, RawHotItem, SourceConfig } from "./types";
 import { normalizeExternalUrl } from "./links";
+import {captureSourceAttempt,evidenceFetch,evidenceParseFailed} from './evidence-capture';
+import {parseExactJson} from './evidence-content';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -11,7 +13,7 @@ const requestHeaders = {
 };
 
 export async function fetchSource(source: SourceConfig): Promise<RawHotItem[]> {
-  const directItems = await fetchDirectSource(source);
+  const directItems = await captureSourceAttempt(source,source.id==='xiaohongshu'?'configured':'direct',()=>fetchDirectSource(source));
   if (directItems.length > 0) {
     return directItems;
   }
@@ -20,7 +22,7 @@ export async function fetchSource(source: SourceConfig): Promise<RawHotItem[]> {
     return [];
   }
 
-  return fetchThirdPartySource(source);
+  return captureSourceAttempt(source,'dailyhotapi',()=>fetchThirdPartySource(source));
 }
 
 export async function fetchAllSources(sources: SourceConfig[]) {
@@ -734,7 +736,7 @@ async function fetchXiaohongshu(source: SourceConfig): Promise<RawHotItem[]> {
 }
 
 async function fetchJson(url: string, label: string, headers: Record<string, string> = {}) {
-  const response = await fetch(url, {
+  const response = await evidenceFetch(url, {
     headers: {
       ...requestHeaders,
       ...headers
@@ -745,7 +747,7 @@ async function fetchJson(url: string, label: string, headers: Record<string, str
     throw new Error(`${label} returned ${response.status}`);
   }
 
-  return (await response.json()) as unknown;
+  try{return parseExactJson(await response.text());}catch(error){evidenceParseFailed(error);throw error;}
 }
 
 async function postJson(
@@ -754,7 +756,7 @@ async function postJson(
   body: unknown,
   headers: Record<string, string> = {}
 ) {
-  const response = await fetch(url, {
+  const response = await evidenceFetch(url, {
     method: "POST",
     headers: {
       ...requestHeaders,
@@ -768,7 +770,7 @@ async function postJson(
     throw new Error(`${label} returned ${response.status}`);
   }
 
-  return (await response.json()) as unknown;
+  try{return parseExactJson(await response.text());}catch(error){evidenceParseFailed(error);throw error;}
 }
 
 async function postForm(
@@ -777,7 +779,7 @@ async function postForm(
   body: Record<string, string>,
   headers: Record<string, string> = {}
 ) {
-  const response = await fetch(url, {
+  const response = await evidenceFetch(url, {
     method: "POST",
     headers: {
       ...requestHeaders,
@@ -791,11 +793,11 @@ async function postForm(
     throw new Error(`${label} returned ${response.status}`);
   }
 
-  return (await response.json()) as unknown;
+  try{return parseExactJson(await response.text());}catch(error){evidenceParseFailed(error);throw error;}
 }
 
 async function fetchDouyinCookie(label: string) {
-  const response = await fetch("https://www.douyin.com/passport/general/login_guiding_strategy/?aid=6383", {
+  const response = await evidenceFetch("https://www.douyin.com/passport/general/login_guiding_strategy/?aid=6383", {
     headers: {
       ...requestHeaders,
       referer: "https://www.douyin.com/"
@@ -812,7 +814,7 @@ async function fetchDouyinCookie(label: string) {
 }
 
 async function fetchText(url: string, label: string, headers: Record<string, string> = {}) {
-  const response = await fetch(url, {
+  const response = await evidenceFetch(url, {
     headers: {
       ...requestHeaders,
       ...headers
@@ -1147,7 +1149,7 @@ function parseJsonpObject(text: string) {
     trimmed.match(/^[^{]*(\{[\s\S]*\})\s*;?\s*$/)?.[1] ??
     trimmed.match(/=\s*(\{[\s\S]*\})\s*;?\s*$/)?.[1] ??
     trimmed;
-  return JSON.parse(objectText) as unknown;
+  try{return parseExactJson(objectText);}catch(error){evidenceParseFailed(error);throw error;}
 }
 
 function extractHtmlLinks(html: string, allowHref: (href: string) => boolean): UnknownRecord[] {
