@@ -16,7 +16,7 @@ const textHeaders = {
 
 export async function fetchArticleContexts(occurrences: TopicOccurrence[]) {
   const candidates = occurrences
-    .filter((item) => /^https?:\/\//.test(item.url))
+    .filter((item) => item.contentType!=='topic'&&/^https?:\/\//.test(item.url))
     .slice(0, 4);
   const contexts: ArticleContext[] = [];
 

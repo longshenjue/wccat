@@ -257,6 +257,7 @@ function buildAnalysisSystemPrompt() {
 - 红蓝不是道德正反方，必须使用从话题中提炼出的真实简略观点。
 - 不要编造未提供的事实；优先基于关联正文，其次基于输入标题、描述、来源、排名和平台属性推断。
 - 如果信息不足，明确说“从现有榜单信号看”。
+- supplementalEvidence 是带来源和采样时间的辅助热榜材料，不是独立事实核验。热搜指数、排名及标签不是评论或点赞量；没有互动样本时不要据此断言群体情绪或支持率。
 - 平台态度要比较差异：微博/百度/B站/澎湃/头条等不能全部说一样。
 - 如果输入中存在 previousAnalysis，必须把它作为稳定锚点：
   - 除非出现官方通报、事实反转、新增关键来源或事件性质明显升级，否则 redLabel 和 blueLabel 必须沿用上一版。
@@ -283,8 +284,12 @@ function toPromptPayload(topic: TopicGroup, articleContexts: ArticleContext[], p
       description: item.description,
       heatText: item.heatText,
       heatValue: item.heatValue,
+      provider: item.provider,
+      providerEndpoint: item.providerEndpoint,
+      contentType: item.contentType,
       platformLens: platformLens[item.sourceId] ?? "通用中文互联网平台"
     })),
+    supplementalEvidence: topic.supplementalEvidence?.slice(0,4)??[],
     articleContexts: articleContexts.map((context) => ({
       sourceId: context.sourceId,
       sourceName: context.sourceName,

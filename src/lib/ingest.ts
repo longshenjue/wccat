@@ -1,7 +1,10 @@
 import type { EngagementStats, RawHotItem, SourceConfig } from "./types";
 import { normalizeExternalUrl } from "./links";
-import {captureSourceAttempt,evidenceFetch,evidenceParseFailed} from './evidence-capture';
+import {captureSourceAttempt,evidenceFetch,evidenceParseFailed,emitEvidenceBatch,evidencePersistenceFailed} from './evidence-capture';
 import {parseExactJson} from './evidence-content';
+import {getTianApiClient} from './tianapi/runtime';
+import {endpointForPlatform} from './tianapi/catalog';
+import type {TianApiClient} from './tianapi/client';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -12,7 +15,13 @@ const requestHeaders = {
   referer: "https://www.baidu.com/"
 };
 
-export async function fetchSource(source: SourceConfig): Promise<RawHotItem[]> {
+type IngestOptions={tianapi?:TianApiClient|null};
+export async function fetchSource(source: SourceConfig,options:IngestOptions={}): Promise<RawHotItem[]> {
+  try{
+    const client=options.tianapi===undefined?await getTianApiClient():options.tianapi;
+    const endpoint=endpointForPlatform(source.id);
+    if(client&&endpoint){const result=await client.fetch(endpoint);if(result){await emitEvidenceBatch(result.batch);if(result.items.length)return result.items;}}
+  }catch(error){evidencePersistenceFailed(error);}
   const directItems = await captureSourceAttempt(source,source.id==='xiaohongshu'?'configured':'direct',()=>fetchDirectSource(source));
   if (directItems.length > 0) {
     return directItems;
@@ -25,8 +34,8 @@ export async function fetchSource(source: SourceConfig): Promise<RawHotItem[]> {
   return captureSourceAttempt(source,'dailyhotapi',()=>fetchThirdPartySource(source));
 }
 
-export async function fetchAllSources(sources: SourceConfig[]) {
-  const settled = await Promise.allSettled(sources.map((source) => fetchSource(source)));
+export async function fetchAllSources(sources: SourceConfig[],options:IngestOptions={}) {
+  const settled = await Promise.allSettled(sources.map((source) => fetchSource(source,options)));
   return settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
 }
 

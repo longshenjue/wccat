@@ -74,6 +74,7 @@ export interface TopicOccurrence extends RawHotItem {
 }
 
 export interface TopicGroup {
+  supplementalEvidence?: SupplementalEvidence[];
   id: string;
   title: string;
   normalizedTitle: string;
@@ -87,6 +88,11 @@ export interface TopicGroup {
   sentiment: Sentiment;
   officialPublicResonance: boolean;
   summary: TopicSummary;
+}
+
+export interface SupplementalEvidence {
+  provider:string;platform:string;endpoint:string;title:string;description?:string;url:string;
+  rank:number;heatText?:string;observedAt:string;runId:string;
 }
 
 export interface TopicSummary {

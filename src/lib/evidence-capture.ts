@@ -16,6 +16,15 @@ export async function withEvidenceCapture<T>(sink:CaptureScope['sink'],action:()
   return result;
 }
 
+/** Explicit adapters already know the item mapping and source timestamps. */
+export async function emitEvidenceBatch(batch:EvidenceBatch) {
+  const scope=capture.getStore();if(!scope)return;
+  try{await scope.sink(batch);}catch(error){scope.errors.push(error);throw error;}
+}
+export function evidencePersistenceFailed(error:unknown):never {
+  capture.getStore()?.errors.push(error);throw error;
+}
+
 /** Keep large numeric identifiers exact in the evidence copy, independently of legacy parsing. */
 function parsePayload(text:string):unknown {
   try {

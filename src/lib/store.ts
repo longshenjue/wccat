@@ -18,17 +18,20 @@ import {getDb} from './db';
 import {guardedWrite} from './maintenance';
 import {EvidenceStore} from './evidence-store';
 import {withEvidenceCapture} from './evidence-capture';
+import {getTianApiClient} from './tianapi/runtime';
+import {fetchTianAuxiliary,attachTianContext} from './tianapi/context';
 
 export async function createDailySnapshot(date = getChinaSnapshotId(),generation?:number): Promise<DailySnapshot> {
   const activeSources = getActiveSources();
   const evidenceRunIds:string[]=[];
-  const rawItems = await withEvidenceCapture(batch=>{
+  const client=await getTianApiClient();
+  const [rawItems,auxiliary] = await withEvidenceCapture(batch=>{
     const db=getDb();
     const recorded=guardedWrite(db,()=>new EvidenceStore(db).recordBatch({...batch,legacySnapshotDate:date}),generation);
     evidenceRunIds.push(recorded.runId);
-  },()=>fetchAllSources(activeSources));
+  },()=>Promise.all([fetchAllSources(activeSources,{tianapi:client??null}),fetchTianAuxiliary(client)]));
   const previousSnapshot = readPreviousSnapshotBeforeDateFromDb(date);
-  const rankedTopics = applyRankSignals(buildTopicRanking(rawItems), previousSnapshot?.topics ?? []);
+  const rankedTopics = attachTianContext(applyRankSignals(buildTopicRanking(rawItems), previousSnapshot?.topics ?? []),auxiliary);
   const topics = await enrichTopicImages(rankedTopics);
   const digest = await enrichDigestWithAI(buildDailyDigest(date, topics), topics);
 

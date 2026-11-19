@@ -1,5 +1,4 @@
 import {getSourceById} from '../sources';
-import {normalizeTitle} from '../normalize';
 import type {RawHotItem,SourceConfig} from '../types';
 import type {EvidenceItem} from '../evidence-types';
 
@@ -22,6 +21,7 @@ export function tianSource(endpoint:TianEndpoint):SourceConfig {
 export function endpointForPlatform(platform:string) {
  return TIANAPI_ENDPOINTS.find(endpoint=>!TIANAPI_CATALOG[endpoint].auxiliary&&TIANAPI_CATALOG[endpoint].platform===platform);
 }
+export function tianTopicKey(title:string){return title.normalize('NFKC').replace(/[^\p{Script=Han}\p{Letter}\p{Number}]+/gu,'').toLowerCase();}
 function heat(value:unknown) {
  const text=typeof value==='string'?value.trim().replaceAll(',',''):typeof value==='number'?String(value):'';
  const match=text.match(/^(\d+(?:\.\d+)?)\s*(万|亿)?$/);if(!match)return undefined;
@@ -34,14 +34,14 @@ export function normalizeTianItems(endpoint:TianEndpoint,list:unknown[],observed
  for(const [index,value] of list.entries()){
   if(!value||typeof value!=='object'||Array.isArray(value)){invalid++;continue;}
   const raw=value as Record<string,unknown>,title=typeof raw[def.title]==='string'?String(raw[def.title]).trim():'';
-  if(!title||title.length>500||!normalizeTitle(title)){invalid++;continue;}
+  if(!title||title.length>500||!tianTopicKey(title)){invalid++;continue;}
   const description=def.description&&typeof raw[def.description]==='string'?String(raw[def.description]).slice(0,1000):undefined;
   const heatValue=def.heat?heat(raw[def.heat]):undefined;
   const heatText=def.heat&&raw[def.heat]!==undefined?String(raw[def.heat]).slice(0,100):undefined;
   const item:RawHotItem={sourceId:source.id,sourceName:source.displayName,sourceKind:source.kind,sourceCategory:source.category,
    rank:index+1,title,url:def.url(title),description,heatValue,heatText,fetchedAt:observedAt,contentType:'topic',provider:'tianapi',providerEndpoint:endpoint};
   evidence.push({url:item.url,kind:'topic',title,description,rank:index+1,heatValue,heatText,heatUnit:heatText?'platform_hot_index':undefined,payload:raw});
-  const identity=normalizeTitle(title);if(!seen.has(identity)){items.push(item);seen.add(identity);}
+  const identity=tianTopicKey(title);if(!seen.has(identity)){items.push(item);seen.add(identity);}
  }
  if(list.length&&!items.length)throw new Error('TianAPI list 未包含有效话题');
  return {items,evidence,invalid};

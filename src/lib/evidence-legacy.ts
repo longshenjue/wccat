@@ -37,6 +37,12 @@ export function recordLegacyAnalysis(db:Database.Database,snapshotDate:string,to
       .all(snapshotDate,item.sourceId,'url:'+safeEvidenceUrl(item.url)) as {id:string;run_id:string}[];
     const chosen=observations.find(observation=>!allowed||allowed.has(observation.run_id));if(chosen)observationIds.push(chosen.id);
   }
+  for(const context of topic?.supplementalEvidence??[]){
+    if(allowed&&!allowed.has(context.runId))continue;
+    const observation=db.prepare(`select o.id from document_observations o join document_aliases a on a.document_id=o.document_id
+      where o.legacy_snapshot_date=? and o.run_id=? and a.platform=? and a.alias=?`).get(snapshotDate,context.runId,context.platform,'url:'+safeEvidenceUrl(context.url)) as {id:string}|undefined;
+    if(observation)observationIds.push(observation.id);
+  }
   const store=new EvidenceStore(db);
   if(meta?.id) {
     const prior=db.prepare("select id,output_hash from analysis_records where purpose='topic-analysis' and legacy_snapshot_date=? and legacy_topic_id=? and model=? order by rowid desc")

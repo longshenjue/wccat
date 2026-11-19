@@ -8,7 +8,7 @@ import type {EvidenceBatch} from '../evidence-types';
 import type {RawHotItem} from '../types';
 
 export type TianConfig={key:string;endpoints:TianEndpoint[];dailyLimit:number};
-export function readTianApiConfig(env:NodeJS.ProcessEnv=process.env):TianConfig|undefined {
+export function readTianApiConfig(env:Readonly<Record<string,string|undefined>>=process.env):TianConfig|undefined {
  const key=env.TIANAPI_KEY?.trim();if(!key||env.TIANAPI_ENABLED==='false')return undefined;
  if(env.TIANAPI_ENABLED&&env.TIANAPI_ENABLED!=='true')throw new Error('TIANAPI_ENABLED 必须为 true 或 false');
  const dailyLimit=Number(env.TIANAPI_DAILY_LIMIT??90);
