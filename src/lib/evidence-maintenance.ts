@@ -13,6 +13,7 @@ import type {RawHotItem,DailySnapshot} from './types';
 import type {TopicAnalysis,TopicAnalysisTrace} from './topic-analysis';
 import {legacyEvidenceItem} from './evidence-mapping';
 import {recordLegacyAnalysis,recordAnalysisTrace} from './evidence-legacy';
+import {validateProviderSchema} from './provider-state';
 
 type BackupManifest={version:1;schema:number;createdAt:string;sha256:string;bytes:number;counts:Record<string,number>};
 const quoted=(name:string)=>'"'+name.replaceAll('"','""')+'"';
@@ -24,6 +25,7 @@ function tableCounts(db:Database.Database) {
     .map(({name})=>[name,(db.prepare('select count(*) as n from '+quoted(name)).get() as {n:number}).n]));
 }
 function requireCompleteSchema(db:Database.Database) {
+  validateProviderSchema(db);
   const names=new Set((db.prepare("select name from sqlite_master where type='table'").all() as {name:string}[]).map(row=>row.name));
   for(const table of [...BUSINESS_TABLES,...EVIDENCE_TABLES])if(!names.has(table))throw new Error('完整备份缺少必需数据表：'+table);
   const version=db.prepare('select version from library_meta where id=1').get() as {version:number}|undefined;
