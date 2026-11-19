@@ -34,6 +34,9 @@ export interface SourceConfig {
 }
 
 export interface RawHotItem {
+  contentType?: 'article' | 'topic';
+  provider?: string;
+  providerEndpoint?: string;
   sourceId: string;
   sourceName: string;
   sourceKind: SourceKind;
