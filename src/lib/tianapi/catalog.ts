@@ -21,7 +21,11 @@ export function tianSource(endpoint:TianEndpoint):SourceConfig {
 export function endpointForPlatform(platform:string) {
  return TIANAPI_ENDPOINTS.find(endpoint=>!TIANAPI_CATALOG[endpoint].auxiliary&&TIANAPI_CATALOG[endpoint].platform===platform);
 }
-export function tianTopicKey(title:string){return title.normalize('NFKC').replace(/[^\p{Script=Han}\p{Letter}\p{Number}]+/gu,'').toLowerCase();}
+export function tianTopicKey(title:string){
+ const value=title.normalize('NFKC').trim();
+ const unwrapped=value.startsWith('#')&&value.endsWith('#')&&value.length>2?value.slice(1,-1):value;
+ return unwrapped.trim().replace(/\s+/gu,' ').toLowerCase();
+}
 function heat(value:unknown) {
  const text=typeof value==='string'?value.trim().replaceAll(',',''):typeof value==='number'?String(value):'';
  const match=text.match(/^(\d+(?:\.\d+)?)\s*(万|亿)?$/);if(!match)return undefined;

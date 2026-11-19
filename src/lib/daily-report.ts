@@ -4,6 +4,8 @@ import {
   readLatestDailyReportFromDb,
   readTopicAnalysesForDate,
   saveDailyReportToDb,
+  saveAiAnalysisLogToDb,
+  saveTopicAnalysisEvidenceToDb,
   writeGeneration
 } from "./db";
 import { normalizeTitle } from "./normalize";
@@ -102,9 +104,13 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
     const original = snapshot?.topics.find((topic) => topic.id === top.analysisTopicId);
     if (original) {
       log('info', '正在补充 TOP1 AI 分析');
+      const analysisDate=top.analysisSnapshotDate;
+      let attemptId:string|undefined;
       top.aiAnalysis = await analyzeTopicWithDeepSeek(original, await fetchArticleContexts(original.occurrences),undefined,trace=>{
+        attemptId=saveAiAnalysisLogToDb(analysisDate,original.id,trace,generation);
         log(trace.status==='ok'?'info':'warn', `TOP1 AI ${trace.model} ${trace.status}，耗时 ${trace.durationMs}ms，fallback=${trace.usedFallback}${trace.error?`：${trace.error}`:''}`);
       });
+      saveTopicAnalysisEvidenceToDb(analysisDate,original.id,top.aiAnalysis,generation,snapshot?.evidenceRunIds,{topic:original,attemptId});
     }
   }
   if(top) log(top.aiAnalysis && top.aiAnalysis.model!=='local-rules'?'info':'warn', `TOP1 分析来源：${top.aiAnalysis?.model ?? '无分析'}${top.aiAnalysis?.model==='local-rules'?'（本地规则回退）':''}`);

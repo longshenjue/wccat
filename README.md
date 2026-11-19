@@ -151,4 +151,6 @@ of this checkout. Anti-crawling issues remain open upstream, including
 
 ## Data Strategy
 
+TianAPI integration supports the six authorized hotlists via the server-only `TIANAPI_KEY` Runtime Secret. Four canonical platform feeds prefer TianAPI with the existing fallback chain; aggregate and Tencent ecosystem feeds add auditable AI context without extra ranking bonuses. Persistent caching and per-endpoint Beijing-day limits protect the free quota. See [configuration and diagnostics](docs/tianapi.md); `npm run tianapi -- status` is local-only and `npm run tianapi -- check` validates the configured account.
+
 The first version prioritizes stable public interfaces first, then falls back to free or low-cost third-party sources such as DailyHotApi-style endpoints. The source boundary is isolated in `src/lib/sources.ts` and `src/lib/ingest.ts`, so individual platforms can later be replaced with direct crawlers, RSS feeds, official APIs, or paid data providers.

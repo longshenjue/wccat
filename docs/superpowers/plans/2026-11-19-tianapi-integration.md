@@ -28,29 +28,29 @@
 
 Files: src/lib/provider-state.ts, db.ts, evidence-maintenance.ts; tests/provider-state.test.ts.
 Interfaces: ProviderState.acquire(account,endpoint,now,limit,owner) returns cache/wait/blocked/reserved; finish/fail update only owning lease, readStatus; ensureProviderSchema/validateProviderSchema.
-- [ ] Write tests and observe RED for cache, limits, two connections, stale owner, day boundary and old backup.
-- [ ] Implement independent schema, reservations and validation; wire main getDb and complete backup verifier.
-- [ ] Run targeted tests GREEN, commit.
+- [x] Write tests and observe RED for cache, limits, two connections, stale owner, day boundary and old backup.
+- [x] Implement independent schema, reservations and validation; wire main getDb and complete backup verifier.
+- [x] Run targeted tests GREEN, commit.
 
 ### Task 2: Six adapters and safe client
 
 Files: src/lib/tianapi/catalog.ts, client.ts, runtime.ts; tests/tianapi-client.test.ts.
 Interfaces: catalog endpoint metadata + normalizeTianItems; TianApiClient.fetch(endpoint) yields items + EvidenceBatch; config from environment.
-- [ ] Write RED tests using official full JSON envelopes, exact endpoints, business failures, malformed and oversized responses, secret echoes, cache and rate gates.
-- [ ] Implement catalog, strict client and runtime assembly, no external dependencies.
-- [ ] Run focused tests GREEN, commit.
+- [x] Write RED tests using official full JSON envelopes, exact endpoints, business failures, malformed and oversized responses, secret echoes, cache and rate gates.
+- [x] Implement catalog, strict client and runtime assembly, no external dependencies.
+- [x] Run focused tests GREEN, commit.
 
 ### Task 3: Acquisition and AI context integration
 
 Files: evidence-capture.ts, ingest.ts, store.ts, types.ts, fulltext.ts, topic-analysis.ts, evidence-legacy.ts, tianapi/context.ts; tests/tianapi-integration.test.ts.
-- [ ] Write RED integration tests for keyless behavior, canonical fallback/single feed, explicit evidence, auxiliary matching, unchanged heat scores, prompt input and analysis references, and generation rejection.
-- [ ] Wire client into fetchSource, expose existing evidence sink for explicit batches, add bounded auxiliary context and skip topic pages during fulltext fetching.
-- [ ] Run integration and full legacy suite GREEN, commit.
+- [x] Write RED integration tests for keyless behavior, canonical fallback/single feed, explicit evidence, auxiliary matching, unchanged heat scores, prompt input and analysis references, and generation rejection.
+- [x] Wire client into fetchSource, expose existing evidence sink for explicit batches, add bounded auxiliary context and skip topic pages during fulltext fetching.
+- [x] Run integration and full legacy suite GREEN, commit.
 
 ### Task 4: Runtime setup, diagnostics and review
 
 Files: scripts/tianapi.ts, package.json, .env.example, docs/tianapi.md, free-data-source-setup.md, evidence-library.md, deploy-northflank.md, README.
-- [ ] Implement status/check CLI and document exact runtime vars, free quotas, actual coverage and verification limitations.
-- [ ] Run full tests, lint, typecheck, production build and git diff --check.
-- [ ] Request one fresh whole-change review, fix material findings RED→GREEN, retain review/rulings record.
-- [ ] Commit, merge and push main under existing user authorization. Report final verification and environment setup; no deployment monitoring.
+- [x] Implement status/check CLI and document exact runtime vars, free quotas, actual coverage and verification limitations.
+- [x] Run full tests, lint, typecheck, production build and git diff --check.
+- [x] Request one fresh whole-change review, fix material findings RED→GREEN, retain review/rulings record.
+- [x] Commit, merge and push main under existing user authorization. Report final verification and environment setup; no deployment monitoring.

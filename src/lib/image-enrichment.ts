@@ -94,7 +94,7 @@ function isEnrichedResult(
 
 async function findArticleImage(occurrences: TopicOccurrence[]): Promise<EnrichedImage | null> {
   const candidates = occurrences
-    .filter((item) => !item.cover && /^https?:\/\//.test(item.url))
+    .filter((item) => item.contentType!=='topic'&&!item.cover && /^https?:\/\//.test(item.url))
     .slice(0, 3);
 
   for (const item of candidates) {

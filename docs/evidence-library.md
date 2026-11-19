@@ -99,7 +99,7 @@ const result = store.recordSearch({
 
 ## 免费账户与后续使用
 
-见 [免费数据源申请与接入状态](free-data-source-setup.md)。本次未取得 TianAPI、Apify、Tavily Key，不会因创建了表结构就启动新服务调用。
+见 [免费数据源申请与接入状态](free-data-source-setup.md)。2026-11-19 已完成 TianAPI 六接口接入，设置 `TIANAPI_KEY` 后实际采集；Apify、Tavily 仍未接入。TianAPI 运行状态独立保存，缓存保留原采样时间；详见 [限额、存储与校验](tianapi.md)。
 
 未知数据使用权限不会自动变成可再分发。未来收费 API 应按证据来源、许可和字段确定开放范围，并优先明确自有事件索引、分析及外部全文/评论的边界。
 

@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {ProviderState} from '../provider-state';
+import {ProviderState,ProviderPayloadLimitError} from '../provider-state';
 import {evidenceHash,parseExactJson,sanitizeEvidence} from '../evidence-content';
 import {getChinaDate} from '../date';
 import {readGeneration,MaintenanceError} from '../maintenance';
@@ -38,7 +38,7 @@ export class TianApiClient {
  }
  enabled(endpoint:TianEndpoint){return this.config.endpoints.includes(endpoint);}
  private clean(value:unknown):unknown {
-  const remove=(item:unknown):unknown=>typeof item==='string'?item.split(this.config.key).join('[REDACTED]'):Array.isArray(item)?item.map(remove):item&&typeof item==='object'?Object.fromEntries(Object.entries(item).map(([key,v])=>[key,remove(v)])):item;
+  const remove=(item:unknown):unknown=>typeof item==='string'?item.split(this.config.key).join('[REDACTED]'):Array.isArray(item)?item.map(remove):item&&typeof item==='object'?Object.fromEntries(Object.entries(item).map(([key,v])=>[String(remove(key)),remove(v)])):item;
   return sanitizeEvidence(remove(value));
  }
  async fetch(endpoint:TianEndpoint):Promise<TianResult|undefined> {
@@ -46,13 +46,13 @@ export class TianApiClient {
   const def=TIANAPI_CATALOG[endpoint],owner=randomUUID(),generation=readGeneration(this.state.db),start=this.now(),deadline=start+20000;
   const batch:EvidenceBatch={id:randomUUID(),source:{provider:'tianapi',platform:def.platform,adapter:endpoint+'-v1',capability:'hotlist',termsUrl:'https://www.tianapi.com/apiview/'+def.id,rightsStatus:'unknown',rightsNote:'已申请免费接口权限；再分发权限未确认'},
    status:'failed',startedAt:new Date(start).toISOString(),observedAt:new Date(start).toISOString(),request:{url:'https://apis.tianapi.com/'+endpoint+'/index',method:'POST',endpoint},provenance:'captured',items:[]};
-  let reservation=this.state.acquire(this.account,endpoint,this.now(),this.config.dailyLimit,owner,generation);
-  while(reservation.kind==='wait'&&this.now()<deadline){await this.sleep(reservation.ms);reservation=this.state.acquire(this.account,endpoint,this.now(),this.config.dailyLimit,owner,generation);}
+  let reservation=this.state.acquire(this.account,endpoint,this.now,this.config.dailyLimit,owner,generation);
+  while(reservation.kind==='wait'&&this.now()<deadline){await this.sleep(reservation.ms);reservation=this.state.acquire(this.account,endpoint,this.now,this.config.dailyLimit,owner,generation);}
   if(reservation.kind==='wait'||reservation.kind==='blocked')return {items:[],batch:{...batch,finishedAt:new Date(this.now()).toISOString(),provenance:'request_skipped',error:reservation.kind==='blocked'?reservation.reason:'provider-busy'}};
   if(reservation.kind==='cached'){
    const observedAt=new Date(reservation.observedAt).toISOString();const payload=reservation.payload as {result:{list:unknown[]}};
    const normalized=normalizeTianItems(endpoint,payload.result.list,observedAt);
-   return {items:normalized.items,batch:{...batch,status:normalized.invalid?'partial':normalized.items.length?'success':'empty',cached:true,observedAt,sourceUpdatedAt:observedAt,finishedAt:new Date(this.now()).toISOString(),response:payload,items:normalized.evidence,provenance:'provider_cache'}};
+   return {items:normalized.items,batch:{...batch,status:normalized.invalid?'partial':normalized.items.length?'success':'empty',cached:true,observedAt,finishedAt:new Date(this.now()).toISOString(),response:payload,items:normalized.evidence,provenance:'provider_cache'}};
   }
   let payload:unknown,code:number|undefined,normalized:ReturnType<typeof normalizeTianItems>;
   try{
@@ -72,7 +72,13 @@ export class TianApiClient {
    return {items:[],batch:{...batch,error:message,finishedAt:new Date(this.now()).toISOString(),response:payload===undefined?undefined:this.clean(payload)}};
   }
   const observedAt=this.now();
-  if(!this.state.complete(this.account,endpoint,owner,observedAt,payload,observedAt+1800000,generation))return {items:[],batch:{...batch,response:payload,error:'provider-lease-lost',finishedAt:new Date(this.now()).toISOString()}};
+  try{
+   if(!this.state.complete(this.account,endpoint,owner,observedAt,payload,observedAt+1800000,generation))return {items:[],batch:{...batch,response:payload,error:'provider-lease-lost',finishedAt:new Date(this.now()).toISOString()}};
+  }catch(error){
+   if(!(error instanceof ProviderPayloadLimitError))throw error;
+   this.state.fail(this.account,endpoint,owner,this.now()+300000,error.message,generation);
+   return {items:[],batch:{...batch,response:payload,responseTruncated:true,error:error.message,finishedAt:new Date(this.now()).toISOString()}};
+  }
   return {items:normalized.items,batch:{...batch,status:normalized.invalid?'partial':normalized.items.length?'success':'empty',observedAt:new Date(observedAt).toISOString(),finishedAt:new Date(this.now()).toISOString(),response:payload,items:normalized.evidence}};
  }
  status(){return this.state.status(this.account);}

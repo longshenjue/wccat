@@ -21,6 +21,7 @@
     "storage:prepare": "tsx scripts/prepare-storage.ts",
     "ai:logs": "tsx scripts/ai-logs.ts",
     "evidence": "node --import tsx scripts/evidence.ts",
+    "tianapi": "node --import tsx scripts/tianapi.ts",
     "worker": "tsx scripts/hourly-refresh.ts",
     "check:sources": "tsx scripts/check-sources.ts"
   },

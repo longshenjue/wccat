@@ -499,7 +499,7 @@ WCCAT_XIAOHONGSHU_API_KEY=...
 
 ### 8.4 数据和算法优化
 
-- 在真实免费账户取得 Key 后验证 TianAPI、Apify、Tavily 适配器；当前注册与权限步骤见 [申请状态](free-data-source-setup.md)。
+- 已接入用户授权的 TianAPI 六热榜接口，运行时设置 `TIANAPI_KEY` 后启用，含持久限额、缓存和辅助证据；真实账户验证见 [部署说明](tianapi.md)。Apify、Tavily 仍待接入，账户步骤见 [申请状态](free-data-source-setup.md)。
 - 基于已存证据建设事件进展、冲突与更正线索查询；后续再建设周期性 AI 分析和受授权范围约束的公共 API。
 
 - 为不同平台建立更细粒度的权重和热度归一化规则。

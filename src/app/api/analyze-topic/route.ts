@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { saveTopicAnalysisToDb, saveAiAnalysisLogToDb, writeGeneration } from "@/lib/db";
+import { saveTopicAnalysisToDb, saveAiAnalysisLogToDb, saveTopicAnalysisEvidenceToDb, getDb, writeGeneration } from "@/lib/db";
 import {getChinaSnapshotId} from '@/lib/date';
 import { fetchArticleContexts } from "@/lib/fulltext";
 import { analyzeTopicWithDeepSeek } from "@/lib/topic-analysis";
@@ -21,13 +21,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid topic payload" }, { status: 400 });
     }
 
+    const evidenceDates=new Set((topic.supplementalEvidence??[]).slice(0,4).flatMap(context=>{
+      const row=getDb().prepare('select legacy_snapshot_date from collection_runs where id=?').get(context.runId) as {legacy_snapshot_date:string|null}|undefined;
+      return row?.legacy_snapshot_date?[row.legacy_snapshot_date]:[];
+    }));
+    const analysisDate=date??(evidenceDates.size===1?[...evidenceDates][0]:getChinaSnapshotId());
+
     const contexts = await fetchArticleContexts(topic.occurrences);
     let attemptId:string|undefined;
     const analysis = await analyzeTopicWithDeepSeek(topic, contexts, undefined,trace=>{
-      attemptId=saveAiAnalysisLogToDb(date??getChinaSnapshotId(),topic.id,trace,generation);
+      attemptId=saveAiAnalysisLogToDb(analysisDate,topic.id,trace,generation);
     });
     if (date) {
       saveTopicAnalysisToDb(date, topic.id, analysis, generation,undefined,{topic,attemptId});
+    } else {
+      saveTopicAnalysisEvidenceToDb(analysisDate,topic.id,analysis,generation,undefined,{topic,attemptId});
     }
 
     return NextResponse.json(analysis);

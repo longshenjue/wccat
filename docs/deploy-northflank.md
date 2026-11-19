@@ -74,6 +74,8 @@ WCCAT_IMAGE_ENRICHMENT=off
 
 密钥只填Runtime Environment/Secret，不填Docker build arguments，不提交到GitHub。
 
+已申请 TianAPI 六接口时，在同一个 WcCAT 服务的 Runtime Secret 添加 `TIANAPI_KEY`。一个 Key 供六接口共用，缺 Key 保持旧采集链路。默认每接口北京时间每日最多 90 次尝试、缓存 30 分钟；容器验证使用 `npm run tianapi -- status` 和 `npm run tianapi -- check`。完整配置及各接口用途见 [TianAPI 接入](tianapi.md)。
+
 Advanced/Volumes中创建并挂载持久卷：
 
 - Name：`wccat-data`
