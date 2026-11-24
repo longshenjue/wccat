@@ -151,22 +151,37 @@ of this checkout. Anti-crawling issues remain open upstream, including
 
 ## Sampled comment examples
 
+Admin now supports [bilingual single-story sharing and editorial recommendations](docs/topic-sharing.md):
+open a topic from hourly/daily history, choose a named column, generate and edit EN/ZH
+copy, then export PNGs and a source-backed ZIP. Recommendations cover the selected
+day and yesterday without AI calls. New English daily packages use an editorial
+opener and three supported focus stories; legacy saved packages remain readable.
+The [X editorial research](docs/x-editorial-patterns.md) records public examples,
+evidence limits and the copy patterns being tested, without promising viral reach.
+
 Hourly analyses, daily reports, bilingual long posters and ShareEn can show one
 actual comment per red/blue attitude beneath the analysis. Cats are editorial
 attitude markers, not user avatars. Like counts and sample times are observed
 data; the sample is not a poll and does not determine the AI energy scores.
 
 Collection runs with `refresh`/`analyze` and current daily generation. Defaults:
-top 10 topics (configurable up to 20), two supported threads per topic, 20 root
-comments per thread, one page and no nested replies. A persistent hard cap of 100
-requests per Beijing day includes BV-to-AV lookups. Successful and empty samples
+top 10 topics (configurable up to 20), two supported threads per topic, at most 20
+comments per thread, one page and no nested reply requests. A persistent hard cap of 100
+requests per Beijing day includes BV-to-AV and article metadata lookups, topic-to-post
+resolution and the optional Huxiu empty-hot-list fallback. Successful and empty samples
 cache for four hours; failures cool down 30 minutes, or six hours for access and
 rate-limit failures. Each request has a seven-second timeout and 512 KiB cap.
 
-Adapters recognize Bilibili AV/BV videos (including explicit `b23.tv/BV…` links),
-Zhihu questions/answers and numeric Weibo post URLs. Search/hot-topic pages,
-opaque short links and other platforms are skipped rather than guessed. Public
-interfaces may reject deployment IPs or require login; unavailable sections hide
+Verified sources include Bilibili, Hupu, Douban, Tieba, The Paper, Tencent News,
+Sina News, NetEase News, IT Home, Huxiu moments and Toutiao. Tieba uses embedded hot
+comments linked to one actual post; Toutiao stops its topic feed at the first complete
+post and resolves that post's comments. Huxiu tries one latest page only after a
+successful empty hot list. These candidates are labeled as selected comments,
+not a claim to the hottest comments across the whole platform. The existing Zhihu
+and numeric Weibo post adapters remain available but were blocked in this audit.
+Unsupported searches, opaque short links and unverified ID mappings are skipped.
+See the [21-platform live audit](docs/comment-source-audit-2026-11-24.md) for results.
+Public interfaces may reject deployment IPs or require login; unavailable sections hide
 without affecting the analysis. No account cookies are collected or required.
 Only known sampled IDs can become quotes. Uncertain/missing sides stay absent.
 English quotes require an available translation and are labeled as AI translations;

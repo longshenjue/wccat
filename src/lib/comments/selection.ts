@@ -1,5 +1,5 @@
 import type {CommentExamples,CommentQuote,CommentSample,CommentSide} from './types';
-import {resolveCommentThread} from './adapters';
+import {commentArticleUrl} from './adapters';
 type Labels={redLabel:string;blueLabel:string};
 const record=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 /** All quotation identity, text and provenance are owned by the collected source. */
@@ -23,8 +23,8 @@ export function visibleCommentQuotes(examples:CommentExamples|undefined,battle:L
  const result:Array<{side:CommentSide;quote:CommentQuote;text:string}>=[];
  for(const side of ['red','blue'] as const){
   const quote=examples[side];if(!quote||typeof quote.text!=='string'||!quote.text.trim()||typeof quote.observedAt!=='string'||!Number.isFinite(Date.parse(quote.observedAt)))continue;
-  const source=resolveCommentThread({sourceId:quote.sourceId,url:quote.articleUrl});if(!source)continue;
-  try{const target=new URL(quote.url),article=new URL(source.articleUrl);if(target.protocol!=='https:'||target.username||target.password||target.origin!==article.origin||target.pathname!==article.pathname||target.search)continue;}catch{continue;}
+  const source=commentArticleUrl({sourceId:quote.sourceId,url:quote.articleUrl});if(!source)continue;
+  try{const target=new URL(quote.url),article=new URL(source);if(target.protocol!=='https:'||target.username||target.password||target.origin!==article.origin||target.pathname!==article.pathname||target.search)continue;}catch{continue;}
   if(examples.red?.id&&examples.red.id===examples.blue?.id)continue;
   const text=language==='en'?quote.englishText:quote.text;
   if(typeof text!=='string'||!text.trim()||(language==='en'&&/\p{Script=Han}/u.test(text)))continue;

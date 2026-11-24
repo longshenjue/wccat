@@ -9,10 +9,11 @@ import { validateImageAsset, WIDE_IMAGE, SPLIT_IMAGE } from '@/lib/shareen-image
 import { getShareEnBattle } from '@/lib/shareen-battle';
 import {CommentQuotes} from './comment-quotes';
 import {shareEnCanvasHeight,shareEnCommentSource} from '../lib/comments/sharing';
+import {columnForLanguage} from '../lib/topic-sharing/columns';
 export {shareEnCanvasHeight} from '../lib/comments/sharing';
 
 export function shareEnCardIdentity(report: WccatDailyReport, copy: ShareEnCopy, index: number): string {
- if (index === 0) return '01 · Daily overview';
+ if (index === 0) return copy.layout==='editorial'?'01 · Selected signals':'01 · Daily overview';
  const topic = report.topics.find(topic=>topic.id === copy.highlights[index-1]?.topicId);
  return `${String(index+1).padStart(2,'0')} · original rank #${topic?.rank ?? '?'} · ${copy.highlights[index-1]?.hook ?? ''}`;
 }
@@ -35,9 +36,9 @@ function Story({image,text}:{image:ShareEnImage|undefined;text:string}) {
  </div>;
 }
 
-function DebateStrip({battle}:{battle:ShareEnBattle}) {
+function DebateStrip({battle,editorial=false}:{battle:ShareEnBattle;editorial?:boolean}) {
  return <section className="shareen-debate" aria-label="Emotional opposition">
-  <div className="shareen-debate-heading"><h2>THE DEBATE</h2><span>{battle.basis==='analysis'?'SOURCE ANALYSIS':'AI ESTIMATE'}</span></div>
+  <div className="shareen-debate-heading"><h2>THE DEBATE</h2><span>{editorial?(battle.basis==='analysis'?'AI SOURCE ANALYSIS · NOT A POLL':'AI ESTIMATE · NOT A POLL'):(battle.basis==='analysis'?'SOURCE ANALYSIS':'AI ESTIMATE')}</span></div>
   <div className="shareen-debate-labels"><strong>{battle.redLabel}</strong><em>VS</em><strong>{battle.blueLabel}</strong></div>
   <div className="shareen-debate-energy" role="img" aria-label={`${battle.redLabel}: ${battle.redScore}; ${battle.blueLabel}: ${battle.blueScore}. Relative AI debate energy.`}>
    <div className="shareen-debate-red" style={{flex:battle.redScore}}/><div className="shareen-debate-blue" style={{flex:battle.blueScore}}/>
@@ -56,21 +57,28 @@ export function ShareEnPoster({report,copy,index}:{report:WccatDailyReport;copy:
  const comments=shareEnCommentSource(report,copy,index);
  const height=shareEnCanvasHeight(report,copy,index);
  const highlights = new Set(copy.highlights.map(item=>item.topicId));
- return <article className={`shareen-card ${index===0?'shareen-overview':'shareen-detail'}${height>1500?' shareen-with-comments':''}`} style={{height}} lang="en" data-shareen-index={index} data-shareen-height={height} aria-label={shareEnCardIdentity(report,copy,index)}>
+ const editorial=copy.layout==='editorial';
+ return <article className={`shareen-card ${index===0?'shareen-overview':'shareen-detail'}${editorial?' shareen-editorial':''}${height>1500?' shareen-with-comments':''}`} style={{height}} lang="en" data-shareen-index={index} data-shareen-height={height} aria-label={shareEnCardIdentity(report,copy,index)}>
   {index===0?<header className="shareen-overview-header" data-fit-zone>
    <Brand/>
-   <h1 className="shareen-masthead">Daily Hot · China Top {copy.overview.topics.length}</h1>
+   <h1 className="shareen-masthead">{editorial?'The daily edition':`Daily Hot · China Top ${copy.overview.topics.length}`}</h1>
    <p className="shareen-masthead-date">{report.reportDate}</p>
   </header>:<header className="shareen-card-header" data-fit-zone><Brand/><div className="shareen-edition"><b>{report.reportDate}</b><span>DAILY HOT / SHAREEN</span></div></header>}
   <div className="shareen-card-body" data-fit-zone>
    {highlight ? <>
-    <div className="shareen-section-kicker"><span>A CLOSER LOOK</span><b>ORIGINAL RANK #{String(topic?.rank??'').padStart(2,'0')}</b></div>
+    <div className="shareen-section-kicker"><span>{highlight.column?columnForLanguage(highlight.column,'en'):'A CLOSER LOOK'}</span><b>ORIGINAL RANK #{String(topic?.rank??'').padStart(2,'0')}</b></div>
     <h1>{highlight.hook}</h1>
     <Story key={image?.src??'no-image'} image={image} text={highlight.whatHappened}/>
-    {battle?<DebateStrip battle={battle}/>:null}
+    {battle?<DebateStrip battle={battle} editorial={editorial}/>:null}
     {comments?<CommentQuotes {...comments} language="en"/>:null}
     <section className="shareen-explainer shareen-why"><h2>WHY IT MATTERS</h2><p>{highlight.whyItMatters}</p></section>
-   </> : <>
+   </> : editorial?<>
+    <div className="shareen-opener-intro"><h1>{copy.overview.headline}</h1><p>{copy.overview.summary}</p></div>
+    <ol className="shareen-signals">{copy.highlights.map((item,i)=><li key={item.topicId}>
+     <div className="shareen-signal-heading"><b>{String(i+1).padStart(2,'0')}</b><span>{columnForLanguage(item.column??'inside','en')}</span></div>
+     <h2>{item.hook}</h2><p>{item.whyItMatters}</p>
+    </li>)}</ol>
+   </>:<>
     <div className="shareen-ranking-label"><span>THE TOP {copy.overview.topics.length}</span><span>ORIGINAL DAILY RANKING</span></div>
     <ol className="shareen-ranking">{copy.overview.topics.map(item=>{
      const original=report.topics.find(topic=>topic.id===item.id);
@@ -78,7 +86,7 @@ export function ShareEnPoster({report,copy,index}:{report:WccatDailyReport;copy:
     })}</ol>
    </>}
   </div>
-  <footer className="shareen-card-footer" data-fit-zone><div><Brand footer/><p>{topic?'Source image and links: see sources.txt':'Highlighted stories have a closer-look card'}</p><p>{report.windowStart} → {report.windowEnd} UTC+8</p></div><b>{String(index+1).padStart(2,'0')}<small> / {String(copy.highlights.length+1).padStart(2,'0')}</small></b></footer>
+  <footer className="shareen-card-footer" data-fit-zone><div><Brand footer/><p>{topic?'Source image and links: see sources.txt':editorial?'Full original ranking and source links: sources.txt':'Highlighted stories have a closer-look card'}</p><p>{report.windowStart} → {report.windowEnd} UTC+8</p></div><b>{String(index+1).padStart(2,'0')}<small> / {String(copy.highlights.length+1).padStart(2,'0')}</small></b></footer>
  </article>;
 }
 

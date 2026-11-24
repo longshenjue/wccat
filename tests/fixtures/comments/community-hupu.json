@@ -1,0 +1,29 @@
+{
+  "code": 200,
+  "data": {
+    "lights": [
+      {
+        "pid": "122136",
+        "content": "<p>苦难就像基巴，每个人都觉得自己的最大</p>",
+        "count": 775,
+        "allLightCount": 775,
+        "isAudit": false,
+        "isHidden": false,
+        "isDelete": false,
+        "isSelfDelete": false,
+        "hidePost": 0
+      },
+      {
+        "pid": "73960",
+        "content": "<p>理解，同系统，自己调解一下，压力放小</p>",
+        "count": 205,
+        "allLightCount": 205,
+        "isAudit": false,
+        "isHidden": false,
+        "isDelete": false,
+        "isSelfDelete": false,
+        "hidePost": 0
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "data": {
+    "last_id": 3834972,
+    "datalist": [
+      {
+        "comment_id": 3834972,
+        "parent_comment_id": 0,
+        "to_comment_id": 0,
+        "object_type": 8,
+        "object_id": 1299525,
+        "content": "民主党多名议员ok",
+        "agree_num": 0,
+        "is_fold": false
+      }
+    ]
+  },
+  "message": "请求成功"
+}

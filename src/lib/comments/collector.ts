@@ -5,7 +5,11 @@ import {EvidenceStore} from '../evidence-store';
 import {sanitizeEvidence} from '../evidence-content';
 import {guardedWrite,readGeneration,MaintenanceError} from '../maintenance';
 import {resolveCommentThread,normalizeComments,biliComments,CommentResponseError} from './adapters';
-import type {CommentSample,CommentThread,SampledComment} from './types';
+import {resolveNewsRequest} from './news';
+import {resolveTechRequest,fallbackTechRequest} from './tech';
+import {resolveToutiaoRequest} from './toutiao';
+import {firstFeedItemEnvelope} from './first-feed-item';
+import type {CommentRequest,CommentSample,CommentThread,SampledComment} from './types';
 
 export const COMMENT_TTL=4*3600_000;
 type Dependencies={fetch?:typeof fetch;now?:()=>number;sleep?:(ms:number)=>Promise<void>;dailyLimit?:number};
@@ -27,19 +31,28 @@ export class CommentCollector {
     }
     return {result:{kind:'blocked' as const,reason:'busy'},owner};
   }
-  private async json(url:string,generation:number):Promise<unknown>{
+  private async text(request:CommentRequest,generation:number,referer:string,firstFeedItem=false):Promise<string>{
+    const {url}=request;
     const {result,owner}=await this.reserve('comments-network-v1','all',this.dailyLimit,generation);
     if(result.kind!=='reserved')throw new CommentResponseError('Comment network budget unavailable');
     try{
-      const response=await this.request(url,{redirect:'error',signal:AbortSignal.timeout(7000),headers:{accept:'application/json','user-agent':'Mozilla/5.0',referer:new URL(url).hostname==='api.bilibili.com'?'https://www.bilibili.com/':new URL(url).origin+'/'} });
+      const response=await this.request(url,{redirect:'error',signal:AbortSignal.timeout(7000),method:request.method??'GET',...(request.body!==undefined?{body:request.body}:{}),headers:{accept:'application/json,text/html;q=0.9','user-agent':'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',referer,...(request.contentType?{'content-type':request.contentType}:{})} });
       if(!response.ok){await response.body?.cancel();throw new CommentResponseError('Comment HTTP '+response.status,response.status);}
       const reader=response.body?.getReader();if(!reader)throw new CommentResponseError('Empty comment response');
       const chunks:Uint8Array[]=[];let bytes=0;
-      try{while(true){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>512*1024)throw new CommentResponseError('Comment response exceeds byte limit');chunks.push(value);}}finally{await reader.cancel().catch(()=>{});}
-      return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+      try{while(true){
+        const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;
+        if(bytes>512*1024)throw new CommentResponseError('Comment response exceeds byte limit');chunks.push(value);
+        if(firstFeedItem){const first=firstFeedItemEnvelope(Buffer.concat(chunks).toString('utf8'));if(first!==undefined)return first;}
+      }}finally{await reader.cancel().catch(()=>{});}
+      if(firstFeedItem)throw new CommentResponseError('First comment-source post unresolved');
+      return Buffer.concat(chunks).toString('utf8');
     }finally{
       this.state.complete('comments-network-v1','all',owner,this.now(),{},this.now(),generation);
     }
+  }
+  private async json(request:CommentRequest,generation:number,referer:string):Promise<unknown>{
+    return JSON.parse(await this.text(request,generation,referer)) as unknown;
   }
   async collect(occurrences:Array<{sourceId:string;url:string}>):Promise<CommentSample>{
     const generation=readGeneration(this.db),comments:SampledComment[]=[],runIds:string[]=[],threads=new Map<string,CommentThread>();
@@ -51,22 +64,29 @@ export class CommentCollector {
       }
       if(result.kind!=='reserved')continue;
       try{
-        let apiUrl=thread.apiUrl;
+        let request:CommentRequest|undefined=thread.apiUrl?{url:thread.apiUrl}:undefined;
         if(thread.bvid){
-          const value=await this.json('https://api.bilibili.com/x/web-interface/view?bvid='+thread.bvid,generation) as {code?:number;data?:{aid?:number}};
+          const value=await this.json({url:'https://api.bilibili.com/x/web-interface/view?bvid='+thread.bvid},generation,thread.articleUrl) as {code?:number;data?:{aid?:number}};
           if(value.code!==0||!Number.isSafeInteger(value.data?.aid)||Number(value.data?.aid)<=0)throw new CommentResponseError('Bilibili video lookup failed');
-          apiUrl=biliComments(String(value.data!.aid));
+          request={url:biliComments(String(value.data!.aid))};
         }
-        if(!apiUrl)continue;
-        const response=await this.json(apiUrl,generation),observedAt=new Date(this.now()).toISOString();
+        const readText=(url:string,firstFeedItem=false)=>this.text({url},generation,thread.articleUrl,firstFeedItem);
+        request=await resolveNewsRequest(thread,readText)??await resolveTechRequest(thread,readText)??await resolveToutiaoRequest(thread,readText)??request;
+        if(!request)throw new CommentResponseError('Comment request unavailable');
+        let response=await this.json(request,generation,thread.articleUrl);
+        const fallback=fallbackTechRequest(thread,response);
+        if(fallback){request=fallback;response=await this.json(request,generation,thread.articleUrl);}
+        const observedAt=new Date(this.now()).toISOString();
         // If evidence redaction would change a quotation, omit it instead of publishing altered words as verbatim.
-        const items=normalizeComments(thread,response,observedAt).filter(comment=>sanitizeEvidence(comment.text)===comment.text);
-        const run=guardedWrite(this.db,()=>new EvidenceStore(this.db).recordBatch({source:{provider:'public-comments',platform:thread.sourceId,adapter:'root-hot-v1',capability:'comments'},status:items.length?'success':'empty',observedAt,request:{articleUrl:thread.articleUrl,apiUrl,limit:20,pages:1,nested:false},response:{comments:items},items:[]}),generation);
+        const commentThread=request.articleUrl?{...thread,articleUrl:request.articleUrl}:thread;
+        const items=normalizeComments(commentThread,response,observedAt).filter(comment=>sanitizeEvidence(comment.text)===comment.text);
+        const run=guardedWrite(this.db,()=>new EvidenceStore(this.db).recordBatch({source:{provider:'public-comments',platform:thread.sourceId,adapter:'bounded-comments-v2',capability:'comments'},status:items.length?'success':'empty',observedAt,request:{articleUrl:thread.articleUrl,commentArticleUrl:commentThread.articleUrl,apiUrl:request!.url,method:request!.method??'GET',limit:20,pages:1,nested:false,fallback:!!fallback},response:{comments:items},items:[]}),generation);
         this.state.complete('comments-sample-v1',thread.key,owner,this.now(),{comments:items,runId:run.runId},this.now()+COMMENT_TTL,generation);
         comments.push(...items);runIds.push(run.runId);
       }catch(error){
         if(error instanceof MaintenanceError)throw error;
-        const cooldown=error instanceof CommentResponseError&&[401,403,412,429].includes(error.status)?6*3600_000:30*60_000;
+        const status=error&&typeof error==='object'&&'status' in error?Number(error.status):0;
+        const cooldown=[401,403,412,429].includes(status)?6*3600_000:30*60_000;
         this.state.fail('comments-sample-v1',thread.key,owner,this.now()+cooldown,error instanceof CommentResponseError?error.message:'Comment collection unavailable',generation);
       }
     }

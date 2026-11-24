@@ -1,11 +1,16 @@
 import type {CommentThread,SampledComment} from './types';
+import {resolveCommunityThread,normalizeCommunityComments} from './community';
+import {resolveNewsThread,normalizeNewsComments} from './news';
+import {resolveTechThread,normalizeTechComments} from './tech';
+import {resolveToutiaoThread,normalizeToutiaoComments} from './toutiao';
 
 type Occurrence={sourceId:string;url:string};
 const hosts:Record<string,string[]>={bilibili:['www.bilibili.com','m.bilibili.com','bilibili.com','b23.tv'],zhihu:['www.zhihu.com','zhihu.com'],weibo:['weibo.com','www.weibo.com','m.weibo.cn']};
 export function resolveCommentThread(item:Occurrence):CommentThread|undefined {
+  const extended=resolveCommunityThread(item)??resolveNewsThread(item)??resolveTechThread(item)??resolveToutiaoThread(item);if(extended)return extended;
   let url:URL;try{url=new URL(item.url);}catch{return;}
   if(url.protocol!=='https:'||url.username||url.password||url.port||!hosts[item.sourceId]?.includes(url.hostname))return;
-  const make=(sourceId:CommentThread['sourceId'],id:string,articleUrl:string,extra:Partial<CommentThread>):CommentThread=>({sourceId,key:sourceId+':'+id,articleUrl,sourceName:{bilibili:'B站',zhihu:'知乎',weibo:'微博'}[sourceId],...extra});
+  const make=(sourceId:'bilibili'|'zhihu'|'weibo',id:string,articleUrl:string,extra:Partial<CommentThread>):CommentThread=>({sourceId,key:sourceId+':'+id,articleUrl,sourceName:{bilibili:'B站',zhihu:'知乎',weibo:'微博'}[sourceId],...extra});
   if(item.sourceId==='bilibili'){
     const id=url.hostname==='b23.tv'?url.pathname.match(/^\/(BV[a-zA-Z0-9]{10})\/?$/)?.[1]:url.pathname.match(/^\/video\/(av\d{1,18}|BV[a-zA-Z0-9]{10})\/?$/)?.[1];if(!id)return;
     return make('bilibili',id,'https://www.bilibili.com/video/'+id,id.startsWith('BV')?{bvid:id}:{apiUrl:biliComments(id.slice(2))});
@@ -19,6 +24,13 @@ export function resolveCommentThread(item:Occurrence):CommentThread|undefined {
   if(id)return make('weibo',id,'https://m.weibo.cn/detail/'+id,{apiUrl:`https://m.weibo.cn/comments/hotflow?id=${id}&mid=${id}&max_id_type=0`});
 }
 export function biliComments(aid:string){return `https://api.bilibili.com/x/v2/reply?type=1&oid=${aid}&sort=1&pn=1&ps=20`;}
+/** Citation URLs can identify a real post even when only its topic's embedded hot comments were fetched. */
+export function commentArticleUrl(item:Occurrence):string|undefined {
+  if(item.sourceId==='tieba'){
+    try{const url=new URL(item.url);if(url.protocol==='https:'&&url.hostname==='tieba.baidu.com'&&!url.port&&!url.username&&!url.password&&/^\/p\/\d{1,24}\/?$/.test(url.pathname))return 'https://tieba.baidu.com'+url.pathname.replace(/\/$/,'');}catch{return;}
+  }
+  return resolveCommentThread(item)?.articleUrl;
+}
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 export class CommentResponseError extends Error {constructor(message:string,readonly status=0){super(message);}}
 function plain(value:unknown){
@@ -26,6 +38,7 @@ function plain(value:unknown){
   return value.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<img\b[^>]*>/gi,tag=>tag.match(/\balt=["']([^"']*)["']/i)?.[1]??'').replace(/<br\s*\/?\s*>|<\/p>/gi,' ').replace(/<[^>]*>/g,'').replace(/&(?:nbsp|amp|lt|gt|quot|#39);/g,v=>({'&nbsp;':' ','&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&#39;':"'"}[v]??v)).replace(/&#(x[\da-f]+|\d+);/gi,(_,n:string)=>{const c=n[0].toLowerCase()==='x'?parseInt(n.slice(1),16):Number(n);return c>0&&c<=0x10ffff?String.fromCodePoint(c):'';}).replace(/\s+/g,' ').trim();
 }
 export function normalizeComments(thread:CommentThread,value:unknown,observedAt:string):SampledComment[]{
+  const extended=normalizeCommunityComments(thread,value,observedAt)??normalizeNewsComments(thread,value,observedAt)??normalizeTechComments(thread,value,observedAt)??normalizeToutiaoComments(thread,value,observedAt);if(extended)return extended;
   const root=object(value),data=object(root.data);
   if(thread.sourceId==='bilibili'&&root.code!==0)throw new CommentResponseError('Bilibili comment API refused',[-352,-403,-412].includes(Number(root.code))?403:0);
   if(thread.sourceId==='weibo'&&root.ok!==1)throw new CommentResponseError('Weibo comment API refused',403);

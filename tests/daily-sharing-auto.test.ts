@@ -58,7 +58,9 @@ test('daily generation saves aligned focus captions and repaired emotional strip
   const exportedAlt=new TextDecoder().decode(shareEnTextFiles(saved,saved.shareEn!).find(f=>f.name==='alt-text.txt')!.data);
   assert.equal((exportedAlt.match(/Debate energy/g)??[]).length,3);
   const text=saved.shareEn!.posts[0].text;
-  assert.match(text,/^WcCAT Daily Hot/);
+  assert.equal(saved.shareEn!.layout,'editorial');
+  assert.match(text,/^Science meets culture\./);
+  assert.match(text,/\nWcCAT:[^\n]*source links in sources\.txt\.$/);
   for(let index=0;index<3;index++)assert.ok(text.includes(['1️⃣','2️⃣','3️⃣'][index]+' '+saved.shareEn!.top3[index].summary));
   assert.deepEqual(saved.shareEn!.top3.map(row=>row.topicId),saved.topics.slice(0,3).map(topic=>topic.id));
   const [hidden,replaced,dropped]=saved.shareEn!.highlights;

@@ -18,7 +18,7 @@ test('ShareEn repairs only missing fields and reuses selected-topic titles for c
    const copy=await generateShareEn(report);
    assert.ok(copy);assert.equal(calls,1);
    assert.deepEqual(copy.overview.topics.map(t=>t.id),report.topics.map(t=>t.id));
-   assert.equal(copy.overview.headline,"China’s Top 10");assert.equal(copy.overview.summary,'');
+   assert.equal(copy.overview.headline,'China, beyond the headlines');assert.equal(copy.layout,'editorial');assert.ok(copy.overview.summary);
    assert.deepEqual(copy.top3.map(t=>t.summary),['Concrete story 8','Concrete story 1','Concrete story 3']);
    assert.deepEqual(copy.highlights.map(h=>h.topicId),['topic-8','topic-1','topic-3']);
    assert.equal(copy.altTexts.length,4);
@@ -62,7 +62,7 @@ test('ShareEn repairs only missing fields and reuses selected-topic titles for c
   await t.test('duplicate highlights cannot keep an ambiguous body after a selection repair',async()=>{
    const initial=shareEnDraft(report),first=initial.highlights[0];
    initial.highlights=[first,{...first,whatHappened:'An ambiguous last duplicate.'},initial.highlights[1]];
-   let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({choices:[{message:{content:JSON.stringify(calls===1?initial:{highlightIds:['topic-1','topic-2'],topics:{'topic-1':{hook:'A corrected hook',whatHappened:'A corrected unambiguous account.',whyItMatters:'A corrected explanation.'}}})}}]});};
+   let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({choices:[{message:{content:JSON.stringify(calls===1?initial:{highlightIds:['topic-1','topic-2','topic-3'],topics:{'topic-1':{hook:'A corrected hook',whatHappened:'A corrected unambiguous account.',whyItMatters:'A corrected explanation.'},'topic-3':shareEnDraft(report).highlights[2]}})}}]});};
    const copy=await generateShareEn(report);assert.ok(copy);assert.equal(calls,2);assert.equal(copy.highlights[0].whatHappened,'A corrected unambiguous account.');
   });
   await t.test('a valid selected post survives when another candidate is invalid',async()=>{

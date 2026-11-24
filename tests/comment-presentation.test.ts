@@ -30,3 +30,22 @@ test('daily long posters and focus cards show source-owned examples underneath t
  delete report.topics[0].aiAnalysis!.commentExamples;
  assert.equal(shareEnCanvasHeight(report,copy,1),1500);
 });
+test('all newly verified platforms retain clickable attribution in English and hide the removed timestamp row',()=>{
+ const sources=[
+  ['hupu','https://bbs.hupu.com/643288637.html','Hupu'],
+  ['douban','https://www.douban.com/group/topic/504999396/','Douban'],
+  ['tieba','https://tieba.baidu.com/p/11190155384','Baidu Tieba'],
+  ['thepaper','https://www.thepaper.cn/newsDetail_forward_34458875','The Paper'],
+  ['qq-news','https://new.qq.com/rain/a/20261112A0B42W00','Tencent News'],
+  ['sina-news','https://news.sina.com.cn/s/2026-11-11/doc-iniyixxy2059982.shtml','Sina News'],
+  ['netease-news','https://www.163.com/dy/article/LBJP2QG805118DFD.html','NetEase News'],
+  ['ithome','https://m.ithome.com/html/1030120.htm','IT Home'],
+  ['huxiu','https://www.huxiu.com/moment/1299525.html','Huxiu'],
+  ['toutiao','https://m.toutiao.com/w/1882699991898124/','Toutiao']
+ ];
+ for(const [sourceId,url,name] of sources){
+  const sample={...examples,blue:undefined,red:{...quote,id:sourceId+':1',sourceId,url,articleUrl:url}};
+  const markup=renderToStaticMarkup(createElement(CommentQuotes,{examples:sample,battle,language:'en'}));
+  assert.ok(markup.includes(name),sourceId);assert.ok(markup.includes('href="'+url+'"'),sourceId);assert.match(markup,/Please publish the complete evidence/);assert.doesNotMatch(markup,/<time|Sampled at|采样于/);
+ }
+});

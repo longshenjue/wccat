@@ -1,0 +1,61 @@
+{
+  "error_code": 0,
+  "topic_info": {
+    "topic_id": 28369796
+  },
+  "area_card_list": [
+    {
+      "area_type": "content",
+      "card_data": [
+        {
+          "data": {
+            "thread_info": {
+              "tid": 11190155384,
+              "hot_post_list": [
+                {
+                  "id": 154133894604,
+                  "tid": 11190155384,
+                  "content": [
+                    {
+                      "type": 0,
+                      "text": "举办好啊，大家都要学会举办，善于举办，灰尘不扫不会自己跑掉"
+                    },
+                    {
+                      "type": 2,
+                      "text": "image_emoticon"
+                    }
+                  ],
+                  "agree": {
+                    "agree_num": 650
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "data": {
+            "thread_info": {
+              "tid": 11190655445,
+              "hot_post_list": [
+                {
+                  "id": 154134536900,
+                  "tid": 11190655445,
+                  "content": [
+                    {
+                      "type": 0,
+                      "text": "这不几个月前的事吗，德芙现在还敢发出来？"
+                    }
+                  ],
+                  "agree": {
+                    "agree_num": 1264
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

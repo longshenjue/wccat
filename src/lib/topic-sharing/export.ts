@@ -1,0 +1,51 @@
+import type {ZipEntry} from '../client-zip';
+import type {TopicShareLanguage,TopicShareRecord} from './types';
+import {usableTopicQuotes} from './recommendation';
+
+/** Only frozen, validated HTTP(S) citations enter a download. */
+export function topicSourceHref(value:string):string|undefined {
+ try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:undefined;}catch{return undefined;}
+}
+
+export function topicShareTextFiles(record:TopicShareRecord):ZipEntry[] {
+ if(record.copy.sourceFingerprint!==record.source.fingerprint)throw new Error('分享来源版本不一致，请重新载入已保存稿。');
+ const files:Array<{name:string;text:string}>=[];
+ for(const language of ['en','zh'] as const){
+  const copy=record.copy[language],selected=copy.posts.find(post=>post.id===copy.selectedPostId);
+  if(!selected||!selected.text.trim())throw new Error(`${language==='en'?'EN':'中文 zh'} 配文候选无效，请先选择完整配文。`);
+  files.push({name:`post-${language}.txt`,text:selected.text},{name:`replies-${language}.txt`,text:copy.replies.join('\n\n')},{name:`alt-${language}.txt`,text:copy.altText});
+ }
+ // Group caption/reply/alt files by purpose so the bilingual pair stays together.
+ const ordered=['post-en.txt','post-zh.txt','replies-en.txt','replies-zh.txt','alt-en.txt','alt-zh.txt'].map(name=>files.find(file=>file.name===name)!);
+ const source=record.source,quotes=usableTopicQuotes(source,'zh');
+ ordered.push({name:'sources.txt',text:[
+  'WcCAT · Single story / 单话题',source.date,`Original title: ${source.title}`,`Source key: ${source.sourceKey}`,`Frozen source fingerprint: ${source.fingerprint}`,`Source ref: ${JSON.stringify(source.ref)}`,
+  'Observed platform attention and selected comments are not a population survey. / 平台热度和评论摘选不代表总体民意。','',
+  ...source.links.flatMap(link=>{const url=topicSourceHref(link.url);return url?[`${link.sourceName} · ${link.title}`,url]:[];}),
+  ...quotes.flatMap(({quote})=>['',`Comment ID: ${quote.id}`,`Source: ${quote.sourceName} · ${quote.url}`,`Likes: ${quote.likes??'not provided'}`,`Original: ${quote.text}`,...(quote.englishText?[`AI translation${quote.englishIsExcerpt?' (excerpt)':''}: ${quote.englishText}`]:[])])
+ ].join('\n')});
+ ordered.push({name:'experiment-notes.txt',text:[
+  'Editorial copy experiments; not a viral forecast or a guarantee of reach.',
+  '编辑实验，不是爆款预测；没有 X 互动数据或效果保证。',
+  `Column: ${record.copy.column}`,`Saved revision: ${record.revision}`,`Generated copy: ${record.copy.generatedAt}`,`Model: ${record.copy.model}`,'',
+  ...(['en','zh'] as const).flatMap(language=>[`${language.toUpperCase()} caption candidates:`,...record.copy[language].posts.flatMap(post=>[`${post.id===record.copy[language].selectedPostId?'[selected] ':''}${post.id} · ${post.pattern}`,post.reason,post.text,''])])
+ ].join('\n')});
+ return ordered.map(({name,text})=>({name,data:new TextEncoder().encode(text+'\n')}));
+}
+
+export async function createTopicShareZip(record:TopicShareRecord,pngs:Record<TopicShareLanguage,Uint8Array>):Promise<Uint8Array<ArrayBuffer>> {
+ const texts=topicShareTextFiles(record);
+ for(const language of ['en','zh'] as const)if(!pngs[language]?.byteLength)throw new Error(`${language==='en'?'EN':'中文 zh'} PNG 尚未生成，不能导出不完整 ZIP。`);
+ const {createStoreZip}=await import('../client-zip');
+ return createStoreZip([{name:'en.png',data:pngs.en},{name:'zh.png',data:pngs.zh},...texts]);
+}
+
+/** No evidence is clipped: try a readable compact layout, then stop the download. */
+export function fitTopicShareCard(card:HTMLElement,identity:string):boolean {
+ const overflows=()=>[...card.querySelectorAll<HTMLElement>('[data-topic-fit]')].some(zone=>zone.scrollHeight>zone.clientHeight+1||zone.scrollWidth>zone.clientWidth+1);
+ card.classList.remove('topic-share-compact');
+ if(!overflows())return false;
+ card.classList.add('topic-share-compact');
+ if(overflows())throw new Error(`卡片 ${identity} 超出 1080 × ${card.offsetHeight||1800} 安全区，请缩短文案后重试。`);
+ return true;
+}

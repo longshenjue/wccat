@@ -1,0 +1,17 @@
+{
+  "code": 200,
+  "data": {
+    "hasNext": false,
+    "pageNum": 1,
+    "nextPageNum": 2,
+    "pageSize": 10,
+    "total": 1,
+    "list": [
+      {
+        "commentId": 45342188,
+        "content": "要重罚！",
+        "praiseTimes": "9"
+      }
+    ]
+  }
+}

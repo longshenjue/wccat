@@ -1,0 +1,45 @@
+{
+  "total": 77,
+  "start": 0,
+  "count": 20,
+  "comments": [
+    {
+      "id": "6812104352",
+      "text": "新西兰的签证相对来说容易申，DIY比较方便，给时间也给得很大方。\nAlipay/WechatPay的汇率也很优秀，在新西兰几乎可以不用现金，当然还是要换一些备用。",
+      "vote_count": 87,
+      "is_deleted": false,
+      "is_disabled": false,
+      "is_folded": false,
+      "is_censoring": false
+    },
+    {
+      "id": "6812145556",
+      "text": "好棒的帖子！请问楼主是从上海飞的吧，全程大概多少天呢，包含大交通",
+      "vote_count": 14,
+      "is_deleted": false,
+      "is_disabled": false,
+      "is_folded": false,
+      "is_censoring": false
+    },
+    {
+      "id": "6812150671",
+      "text": "是的，一共八天七夜。",
+      "vote_count": 4,
+      "is_deleted": false,
+      "is_disabled": false,
+      "is_folded": false,
+      "is_censoring": false
+    }
+  ],
+  "popular_comments": [
+    {
+      "id": "6812104352",
+      "text": "新西兰的签证相对来说容易申，DIY比较方便，给时间也给得很大方。\nAlipay/WechatPay的汇率也很优秀，在新西兰几乎可以不用现金，当然还是要换一些备用。",
+      "vote_count": 87,
+      "is_deleted": false,
+      "is_disabled": false,
+      "is_folded": false,
+      "is_censoring": false
+    }
+  ]
+}

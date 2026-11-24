@@ -8,7 +8,7 @@ report.topics=Array.from({length:4},(_,i)=>({...report.topics[0],id:`topic-${i+1
 delete report.shareEnglish;
 function draft(){return {
  overview:{headline:'China in context',summary:'A day of science and culture.',topics:report.topics.map((t,i)=>({id:t.id,title:`Story ${i+1}`}))},
- highlights:[4,2].map(i=>({topicId:`topic-${i}`,hook:'A closer look',whatHappened:'A story attracted attention.',context:'The available report provides background.',whyItMatters:'It could matter to readers abroad.',battle:{redLabel:'Demand accountability',blueLabel:'Wait for evidence',redRationale:'Critics want a clear explanation.',blueRationale:'Others want to verify the report.',redScore:40,blueScore:60}})),
+ highlights:[4,2,3].map(i=>({topicId:`topic-${i}`,hook:'A closer look',whatHappened:'A story attracted attention.',context:'The available report provides background.',whyItMatters:'It could matter to readers abroad.',battle:{redLabel:'Demand accountability',blueLabel:'Wait for evidence',redRationale:'Critics want a clear explanation.',blueRationale:'Others want to verify the report.',redScore:40,blueScore:60}})),
  top3:[1,2,3].map(i=>({topicId:`topic-${i}`,summary:`Original daily story ${i}`})),
  posts:[{id:'digest',template:'daily_digest',text:'Science meets culture.',reason:'条目多元'},{id:'bridge',template:'global_bridge',text:'A view from China.',reason:'海外关联'}],selectedPostId:'bridge',
  altTexts:['Four ranked news topics.','The fourth ranked topic explained.','The second ranked topic explained.']
@@ -20,9 +20,9 @@ test('ShareEn captions describe selected focus cards while highlights keep their
  try {
   const copy=await generateShareEn(report);
   assert.ok(copy);assert.equal(requests,1);
-  assert.deepEqual(copy.highlights.map(h=>h.topicId),['topic-4','topic-2']);
+  assert.deepEqual(copy.highlights.map(h=>h.topicId),['topic-4','topic-2','topic-3']);assert.equal(copy.layout,'editorial');
   assert.equal(copy.sourceFingerprint,sourceFingerprint(report));
-  for(const post of copy.posts){assert.ok(post.text.startsWith('WcCAT Daily Hot\n'));assert.match(post.text,/1️⃣ Story 4/);assert.match(post.text,/2️⃣ Original daily story 2/);assert.ok(!post.text.includes('3️⃣'));assert.match(post.text,/WcCAT.*cards/);}
+  for(const post of copy.posts){assert.ok(!post.text.startsWith('WcCAT Daily Hot\n'));assert.match(post.text,/1️⃣ Story 4/);assert.match(post.text,/2️⃣ Original daily story 2/);assert.match(post.text,/3️⃣ Original daily story 3/);assert.match(post.text,/WcCAT.*cards/);}
   await t.test('source identity ignores sharing caches but changes with Chinese content',()=>{
    assert.equal(sourceFingerprint({...report,shareEn:copy}),sourceFingerprint(report));
    assert.notEqual(sourceFingerprint({...report,headline:'新标题'}),sourceFingerprint(report));
@@ -37,10 +37,10 @@ test('ShareEn captions describe selected focus cards while highlights keep their
   });
   await t.test('wrong ordered identities, repeated highlights and missing fields block validation',()=>{
    assert.throws(()=>validateShareEn({...copy,overview:{...copy.overview,topics:[...copy.overview.topics].reverse()}},report),/identity|order/i);
-   assert.throws(()=>validateShareEn({...copy,highlights:[copy.highlights[0],copy.highlights[0]]},report),/duplicate/i);
+   assert.throws(()=>validateShareEn({...copy,highlights:[copy.highlights[0],copy.highlights[0],copy.highlights[2]]},report),/duplicate/i);
    assert.throws(()=>validateShareEn({...copy,top3:copy.top3.slice(1)},report),/top3/i);
-   assert.throws(()=>validateShareEn({...copy,highlights:[{...copy.highlights[0],whatHappened:''},copy.highlights[1]]},report),/whatHappened/i);
-   assert.throws(()=>validateShareEn({...copy,posts:copy.posts.map(p=>({...p,text:'Unbranded'}))},report),/brand/i);
+   assert.throws(()=>validateShareEn({...copy,highlights:copy.highlights.map((h,i)=>i===0?{...h,whatHappened:''}:h)},report),/whatHappened/i);
+   assert.throws(()=>validateShareEn({...copy,posts:copy.posts.map(p=>({...p,text:p.text.replace(/WcCAT[^\n]+$/u,'An unbranded footer')}))},report),/brand/i);
   });
   await t.test('numerical differences and long natural English are advisory',()=>{
    const warnings:string[]=[];

@@ -2,12 +2,16 @@
 import {useEffect,useRef,useState} from 'react';
 import {browseUrl,chinaTime,safeArticleHref,useAdminRead} from './admin-query';
 import {TopicTrend} from './topic-trend';
+import {TopicShareEditor} from './topic-sharing/topic-share-editor';
+import type {TopicShareRef} from '@/lib/topic-sharing/types';
+import './topic-sharing/topic-sharing.css';
 import type {ItemDetail,TrendPoint} from '@/lib/admin-browse-types';
 import type {TopicGroup,RawHotItem} from '@/lib/types';
 
 export function AdminItemDetail({snapshot,version,itemKey,date,days,onClose,onDays,onTopic,onSample}:{snapshot:string;version:string;itemKey:string;date:string;days:string;onClose:()=>void;onDays:(days:string)=>void;onTopic:(key:string)=>void;onSample:(point:TrendPoint)=>void}) {
  const {data,error,loading}=useAdminRead<ItemDetail>(browseUrl('detail',{snapshot,version,key:itemKey}));
  const [copied,setCopied]=useState('');
+ const [sharing,setSharing]=useState<TopicShareRef>();
  const heading=useRef<HTMLHeadingElement>(null);
  useEffect(()=>{
   if(!data)return;
@@ -24,10 +28,11 @@ export function AdminItemDetail({snapshot,version,itemKey,date,days,onClose,onDa
   <p>排名 #{data.item.rank} · {topic?'综合热度 '+topic.heatScore:'原始热度 '+(raw?.heatText??raw?.heatValue??'未保存')}</p>
   {topic?<><p>{topic.summary.oneLine}</p><p className="data-muted">{topic.summary.whyItMatters}</p></>:raw?.description?<p>{raw.description}</p>:null}
   {raw?.stats?<dl className="admin-item-stats">{Object.entries(raw.stats).map(([key,value])=><div key={key}><dt>{key}</dt><dd>{value??'—'}</dd></div>)}</dl>:null}
-  <div className="data-actions"><button onClick={copy}>复制 JSON</button>{data.linkedTopicKey?<button onClick={()=>onTopic(data.linkedTopicKey!)}>查看关联话题与趋势</button>:null}</div>{copied?<p role="status">{copied}</p>:null}
+  <div className="data-actions"><button onClick={copy}>复制 JSON</button><button onClick={()=>setSharing({kind:'hourly',snapshot,version:data.snapshot.version,key:data.linkedTopicKey??data.key})}>生成单话题分享</button>{data.linkedTopicKey?<button onClick={()=>onTopic(data.linkedTopicKey!)}>查看关联话题与趋势</button>:null}</div>{copied?<p role="status">{copied}</p>:null}
   {topic?<TopicTrend snapshot={snapshot} version={version} itemKey={itemKey} date={date} days={days} onDays={onDays} onSample={onSample}/>:null}
   <h4>来源与原文</h4><ul className="admin-source-links">{links.map((link,index)=><li key={index}>{safeArticleHref(link.url)?<a href={safeArticleHref(link.url)} target="_blank" rel="noopener noreferrer">{link.sourceName} · {link.title} ↗</a>:<span>{link.sourceName} · 原始链接不可用</span>}</li>)}</ul>
   {data.analysis?<details><summary>已有 AI 分析 · {data.analysis.model}</summary><p>{data.analysis.summary}</p><p className="admin-preserve-text">{data.analysis.detailedContent}</p><p className="admin-preserve-text">{data.analysis.outsiderContext}</p></details>:<p className="data-muted">该版本没有已保存的 AI 分析。</p>}
+  {sharing?<TopicShareEditor sourceRef={sharing} onClose={()=>setSharing(undefined)}/>:null}
   <details><summary>完整 JSON</summary><pre className="admin-json">{JSON.stringify(data,null,2)}</pre></details>
  </section>;
 }

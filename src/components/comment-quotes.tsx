@@ -11,13 +11,13 @@ function CatMarker({side}:{side:'red'|'blue'}){
   <path d="m12 38 10 2m-10 5 10-2m30-5-10 2m10 5-10-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
  </svg>;
 }
-const names:Record<string,string>={bilibili:'Bilibili',zhihu:'Zhihu',weibo:'Weibo'};
+const names:Record<string,string>={bilibili:'Bilibili',zhihu:'Zhihu',weibo:'Weibo',hupu:'Hupu',douban:'Douban',tieba:'Baidu Tieba',thepaper:'The Paper','qq-news':'Tencent News','sina-news':'Sina News','netease-news':'NetEase News',ithome:'IT Home',huxiu:'Huxiu',toutiao:'Toutiao'};
 /** Absent, unclassified or untranslated samples occupy no space. */
 export function CommentQuotes({examples,battle,language='zh'}:{examples?:CommentExamples;battle?:{redLabel:string;blueLabel:string};language?:'zh'|'en'}){
  const rows=visibleCommentQuotes(examples,battle,language);if(!rows.length)return null;
  const en=language==='en';
  return <section className="comment-quotes" aria-label={en?'Actual sampled comments':'实际采样评论'}>
-  <div className="comment-quotes-heading"><strong>{en?'IN THEIR WORDS':'用户怎么说'}</strong><span>{en?'Sampled hot comments':'采样热评'}</span></div>
+  <div className="comment-quotes-heading"><strong>{en?'IN THEIR WORDS':'用户怎么说'}</strong><span>{en?'Selected comments':'评论摘选'}</span></div>
   <div className="comment-quotes-list">{rows.map(({side,quote,text})=>{
    const excerpt=excerptComment(text,language);
    return <article key={side} className={`comment-quote comment-quote-${side}`}>
