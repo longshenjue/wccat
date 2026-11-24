@@ -4,6 +4,7 @@ import {getChinaSnapshotId} from '@/lib/date';
 import { fetchArticleContexts } from "@/lib/fulltext";
 import { analyzeTopicWithDeepSeek } from "@/lib/topic-analysis";
 import type { TopicGroup } from "@/lib/types";
+import {enrichTopicComments} from '@/lib/comments/runtime';
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +30,10 @@ export async function POST(request: Request) {
 
     const contexts = await fetchArticleContexts(topic.occurrences);
     let attemptId:string|undefined;
-    const analysis = await analyzeTopicWithDeepSeek(topic, contexts, undefined,trace=>{
+    const baseAnalysis = await analyzeTopicWithDeepSeek(topic, contexts, undefined,trace=>{
       attemptId=saveAiAnalysisLogToDb(analysisDate,topic.id,trace,generation);
     });
+    const analysis=await enrichTopicComments(topic,baseAnalysis);
     if (date) {
       saveTopicAnalysisToDb(date, topic.id, analysis, generation,undefined,{topic,attemptId});
     } else {

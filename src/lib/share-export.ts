@@ -3,6 +3,8 @@ import type { ShareEnCopy } from './shareen-types';
 import type { ZipEntry } from './client-zip';
 import {shareEnImage} from './shareen-media';
 import {getShareEnBattle} from './shareen-battle';
+import {shareEnCommentSource} from './comments/sharing';
+import {visibleCommentQuotes,excerptComment} from './comments/selection';
 
 /** Measure at export size. All text remains visible, including when it cannot fit. */
 export function fitShareEnCard(card: HTMLElement, identity: string): boolean {
@@ -11,7 +13,7 @@ export function fitShareEnCard(card: HTMLElement, identity: string): boolean {
  card.classList.remove('shareen-compact');
  if (!overflows()) return false;
  card.classList.add('shareen-compact');
- if (overflows()) throw new Error(`卡片 ${identity} 超出 1200 × 1500 安全区，请缩短该卡文案后重试。`);
+ if (overflows()) throw new Error(`卡片 ${identity} 超出 1200 × ${card.offsetHeight||1500} 安全区，请缩短该卡文案后重试。`);
  return true;
 }
 
@@ -19,7 +21,11 @@ export function fitShareEnCard(card: HTMLElement, identity: string): boolean {
 function currentAltText(report:WccatDailyReport,copy:ShareEnCopy,index:number,text:string):string {
  const base=text.replace(/\sDebate energy \((?:existing (?:AI )?analysis|AI estimate)\):[^\n]*$/u,'');
  const battle=getShareEnBattle(report,copy,index);if(!battle)return base;
- return `${base} Debate energy (${battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${battle.redLabel} ${battle.redScore}, ${battle.blueLabel} ${battle.blueScore}. ${battle.redRationale} ${battle.blueRationale}`;
+ const energy=`Debate energy (${battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${battle.redLabel} ${battle.redScore}, ${battle.blueLabel} ${battle.blueScore}. ${battle.redRationale} ${battle.blueRationale}`;
+ const source=shareEnCommentSource(report,copy,index),rows=source?visibleCommentQuotes(source.examples,source.battle,'en'):[];
+ if(!rows.length)return `${base} ${energy}`;
+ const comments=rows.map(({side,quote,text})=>`${side}: “${Array.from(excerptComment(text,'en').text).slice(0,170).join('')}” (${quote.sourceId}${quote.likes!==undefined?`, ${quote.likes} likes`:''}).`).join(' ');
+ return `${base.slice(0,260)} ${energy.slice(0,180)} Sampled comments (AI-translated excerpts, not a poll): ${comments}`;
 }
 
 export function shareEnTextFiles(report: WccatDailyReport, copy: ShareEnCopy): ZipEntry[] {
@@ -37,7 +43,15 @@ export function shareEnTextFiles(report: WccatDailyReport, copy: ShareEnCopy): Z
     ...topic.links.map(link=>`${link.sourceName}: ${link.url}`), ''
    ]),
    'Focus card image URLs:',...(copy.highlights??[]).map((_,index)=>{const image=shareEnImage(report,copy,index+1);return `Card ${String(index+2).padStart(2,'0')}: ${image?.url??(copy.highlights[index].hideImage?'Image hidden by administrator':'No approved image available')}`;}),
-   'Focus card debate energy:',...(copy.highlights??[]).map((h,index)=>{const battle=getShareEnBattle(report,copy,index+1);return `Original rank #${report.topics.find(t=>t.id===h.topicId)?.rank??'?'}: ${battle?`${battle.redLabel} ${battle.redScore} vs ${battle.blueLabel} ${battle.blueScore} (${battle.basis==='analysis'?'existing analysis':'AI estimate'}; relative energy, not a poll)`:'Attitude analysis unavailable'}`;})
+   'Focus card debate energy:',...(copy.highlights??[]).map((h,index)=>{const battle=getShareEnBattle(report,copy,index+1);return `Original rank #${report.topics.find(t=>t.id===h.topicId)?.rank??'?'}: ${battle?`${battle.redLabel} ${battle.redScore} vs ${battle.blueLabel} ${battle.blueScore} (${battle.basis==='analysis'?'existing analysis':'AI estimate'}; relative energy, not a poll)`:'Attitude analysis unavailable'}`;}),
+   ...(copy.highlights??[]).flatMap((_,index)=>{
+    const source=shareEnCommentSource(report,copy,index+1);if(!source)return [];
+    return visibleCommentQuotes(source.examples,source.battle,'en').flatMap(({side,quote})=>[
+     `Card ${index+2} sampled ${side} comment (${source.examples!.sampleCount} sampled; not a poll):`,
+     `ID: ${quote.id}`,`Source: ${quote.url}`,`Observed: ${quote.observedAt}`,`Likes: ${quote.likes??'not provided'}`,
+     `Original: ${quote.text}`,`AI translation${quote.englishIsExcerpt?' (source excerpt)':''}: ${quote.englishText}`
+    ]);
+   })
   ].join('\n')}
  ];
  return texts.map(({name,text})=>({name,data:new TextEncoder().encode(text)}));

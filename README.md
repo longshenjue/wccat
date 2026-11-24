@@ -149,6 +149,39 @@ of this checkout. Anti-crawling issues remain open upstream, including
 [Douyin cookie failure](https://github.com/imsyy/DailyHotApi/issues/126), and
 [Zhihu 401](https://github.com/imsyy/DailyHotApi/issues/105).
 
+## Sampled comment examples
+
+Hourly analyses, daily reports, bilingual long posters and ShareEn can show one
+actual comment per red/blue attitude beneath the analysis. Cats are editorial
+attitude markers, not user avatars. Like counts and sample times are observed
+data; the sample is not a poll and does not determine the AI energy scores.
+
+Collection runs with `refresh`/`analyze` and current daily generation. Defaults:
+top 10 topics (configurable up to 20), two supported threads per topic, 20 root
+comments per thread, one page and no nested replies. A persistent hard cap of 100
+requests per Beijing day includes BV-to-AV lookups. Successful and empty samples
+cache for four hours; failures cool down 30 minutes, or six hours for access and
+rate-limit failures. Each request has a seven-second timeout and 512 KiB cap.
+
+Adapters recognize Bilibili AV/BV videos (including explicit `b23.tv/BV…` links),
+Zhihu questions/answers and numeric Weibo post URLs. Search/hot-topic pages,
+opaque short links and other platforms are skipped rather than guessed. Public
+interfaces may reject deployment IPs or require login; unavailable sections hide
+without affecting the analysis. No account cookies are collected or required.
+Only known sampled IDs can become quotes. Uncertain/missing sides stay absent.
+English quotes require an available translation and are labeled as AI translations;
+longer comments translate a literal server-selected source excerpt, never a model
+summary. Excerpts are labeled; full originals remain in saved evidence and ZIP sources.
+
+Set `WCCAT_COMMENTS_ENABLED=false` to disable new collection. Use
+`WCCAT_COMMENT_TOPICS` for coverage and `WCCAT_COMMENT_DAILY_LIMIT` to lower the hard
+cap. Missing `DEEPSEEK_API_KEY` skips sampling because reliable classification is
+unavailable. Existing historical reports remain frozen; regenerate a current daily
+report to include new samples. Rendering/downloading never fetch comments or
+invoke AI. ShareEn focus cards with English quotes use a measured 1200 × 1900–2200
+canvas; cards without them retain 1200 × 1500. Excerpts are labeled; full original
+text, translation, IDs and provenance are included in `sources.txt`.
+
 ## Data Strategy
 
 TianAPI integration supports the six authorized hotlists via the server-only `TIANAPI_KEY` Runtime Secret. Four canonical platform feeds prefer TianAPI with the existing fallback chain; aggregate and Tencent ecosystem feeds add auditable AI context without extra ranking bonuses. Persistent caching and per-endpoint Beijing-day limits protect the free quota. See [configuration and diagnostics](docs/tianapi.md); `npm run tianapi -- status` is local-only and `npm run tianapi -- check` validates the configured account.

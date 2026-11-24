@@ -20,6 +20,8 @@ import {saveSharingFields} from "./shareen-persistence";
 import { sentimentLabel } from "./sentiment";
 import { analyzeTopicWithDeepSeek, type TopicAnalysis } from "./topic-analysis";
 import { fetchArticleContexts } from "./fulltext";
+import {enrichTopicComments} from './comments/runtime';
+import {buildFallbackTopicAnalysis} from './topic-analysis';
 import { redactJobMessage } from "./log-redaction";
 import type { DailySnapshot, Sentiment, TopicGroup, TopicOccurrence } from "./types";
 
@@ -114,6 +116,16 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
     }
   }
   if(top) log(top.aiAnalysis && top.aiAnalysis.model!=='local-rules'?'info':'warn', `TOP1 分析来源：${top.aiAnalysis?.model ?? '无分析'}${top.aiAnalysis?.model==='local-rules'?'（本地规则回退）':''}`);
+  // Historical regeneration reuses frozen evidence rather than collecting today's comments.
+  if(Date.now()-end.getTime()<36*3600_000){
+    for(const topic of topics.slice(0,3)){
+      const original=snapshots.find(s=>s.date===topic.analysisSnapshotDate)?.topics.find(t=>t.id===topic.analysisTopicId);
+      if(!original)continue;
+      const analysis=topic.aiAnalysis??buildFallbackTopicAnalysis(original);
+      const enriched=await enrichTopicComments(original,analysis);
+      if(enriched.commentExamples||analysis.commentExamples){topic.aiAnalysis=enriched;log('info',`#${topic.rank} 评论样本：${enriched.commentExamples?.sampleCount??0} 条`);}
+    }
+  }
   log('info', '正在生成中文日报稿件');
   const drafts = await generateDrafts(reportDate, snapshots, topics, {
     start: getChinaSnapshotId(start), end: getChinaSnapshotId(end),complete:collection.complete,observedUntil:collection.observedUntil

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import '../components/comment-quotes.css';
 
 export const metadata: Metadata = {
   title: "WcCAT | What Chinese Care About Today",

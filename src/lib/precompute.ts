@@ -9,6 +9,7 @@ import { fetchArticleContexts } from "./fulltext";
 import { analyzeTopicWithDeepSeek, buildFallbackTopicAnalysis } from "./topic-analysis";
 import type { DailySnapshot } from "./types";
 import {MaintenanceError} from "./maintenance";
+import {precomputeCommentExamples} from './comments/runtime';
 
 const defaultLimit = 1;
 
@@ -71,4 +72,5 @@ export async function precomputeTopicAnalyses(snapshot: DailySnapshot, top?: num
       console.warn(`[WcCAT] analysis fallback for ${topic.title}`, error);
     }
   }
+  await precomputeCommentExamples(snapshot);
 }

@@ -7,6 +7,9 @@ import { fitShareEnCard } from '@/lib/share-export';
 import { shareEnImage, type ShareEnImage } from '@/lib/shareen-media';
 import { validateImageAsset, WIDE_IMAGE, SPLIT_IMAGE } from '@/lib/shareen-image-types';
 import { getShareEnBattle } from '@/lib/shareen-battle';
+import {CommentQuotes} from './comment-quotes';
+import {shareEnCanvasHeight,shareEnCommentSource} from '../lib/comments/sharing';
+export {shareEnCanvasHeight} from '../lib/comments/sharing';
 
 export function shareEnCardIdentity(report: WccatDailyReport, copy: ShareEnCopy, index: number): string {
  if (index === 0) return '01 · Daily overview';
@@ -50,8 +53,10 @@ export function ShareEnPoster({report,copy,index}:{report:WccatDailyReport;copy:
  const topic = highlight ? report.topics.find(topic=>topic.id===highlight.topicId) : undefined;
  const image=shareEnImage(report,copy,index);
  const battle=getShareEnBattle(report,copy,index);
+ const comments=shareEnCommentSource(report,copy,index);
+ const height=shareEnCanvasHeight(report,copy,index);
  const highlights = new Set(copy.highlights.map(item=>item.topicId));
- return <article className={`shareen-card ${index===0?'shareen-overview':'shareen-detail'}`} lang="en" data-shareen-index={index} aria-label={shareEnCardIdentity(report,copy,index)}>
+ return <article className={`shareen-card ${index===0?'shareen-overview':'shareen-detail'}${height>1500?' shareen-with-comments':''}`} style={{height}} lang="en" data-shareen-index={index} data-shareen-height={height} aria-label={shareEnCardIdentity(report,copy,index)}>
   {index===0?<header className="shareen-overview-header" data-fit-zone>
    <Brand/>
    <h1 className="shareen-masthead">Daily Hot · China Top {copy.overview.topics.length}</h1>
@@ -63,6 +68,7 @@ export function ShareEnPoster({report,copy,index}:{report:WccatDailyReport;copy:
     <h1>{highlight.hook}</h1>
     <Story key={image?.src??'no-image'} image={image} text={highlight.whatHappened}/>
     {battle?<DebateStrip battle={battle}/>:null}
+    {comments?<CommentQuotes {...comments} language="en"/>:null}
     <section className="shareen-explainer shareen-why"><h2>WHY IT MATTERS</h2><p>{highlight.whyItMatters}</p></section>
    </> : <>
     <div className="shareen-ranking-label"><span>THE TOP {copy.overview.topics.length}</span><span>ORIGINAL DAILY RANKING</span></div>
@@ -121,5 +127,5 @@ export function ShareEnPreviewCard({report,copy,index,onDownload,disabled,onRepr
   host?.addEventListener('error',afterImage,true);
   return ()=>{active=false;host?.removeEventListener('load',afterImage,true);host?.removeEventListener('error',afterImage,true);};
  },[report,copy,index,identity,imageSrc]);
- return <section className="shareen-preview-card"><div className="shareen-preview-heading"><h4>{identity}</h4><div className="shareen-preview-actions">{index>0&&onReprocess?<button type="button" disabled={disabled||processingDisabled} onClick={onReprocess}>重新处理配图</button>:null}<button type="button" disabled={disabled||Boolean(error)} onClick={onDownload}>↓ PNG</button></div></div><div ref={root}><ScaledPoster width={1200} height={1500}><ShareEnPoster report={report} copy={copy} index={index}/></ScaledPoster></div>{index>0&&imageSrc&&failedImage!==imageSrc?<p className="data-muted" role="status">{image?.processed?`配图已就绪 · ${image.layout==='split'?'分栏 400 × 480（完整原图）':'通栏 1072 × 360'}${asset?.reason?` · ${asset.reason}`:''}`:'原图预览 · 待处理，当前完整显示原图'}</p>:null}{index>0&&(!imageSrc||failedImage===imageSrc)?<p className="data-muted">配图已隐藏或不可用，已自动收起图片区。</p>:null}{index>0&&!getShareEnBattle(report,copy,index)?<p className="data-muted">情绪条尚未就绪，请查看生成日志。重新生成 ShareEn 会尝试补齐；“补齐配图”只处理照片。</p>:null}{error?<p className="data-error" role="alert">{error}</p>:null}</section>;
+ return <section className="shareen-preview-card"><div className="shareen-preview-heading"><h4>{identity}</h4><div className="shareen-preview-actions">{index>0&&onReprocess?<button type="button" disabled={disabled||processingDisabled} onClick={onReprocess}>重新处理配图</button>:null}<button type="button" disabled={disabled||Boolean(error)} onClick={onDownload}>↓ PNG</button></div></div><div ref={root}><ScaledPoster width={1200} height={shareEnCanvasHeight(report,copy,index)}><ShareEnPoster report={report} copy={copy} index={index}/></ScaledPoster></div>{index>0&&imageSrc&&failedImage!==imageSrc?<p className="data-muted" role="status">{image?.processed?`配图已就绪 · ${image.layout==='split'?'分栏 400 × 480（完整原图）':'通栏 1072 × 360'}${asset?.reason?` · ${asset.reason}`:''}`:'原图预览 · 待处理，当前完整显示原图'}</p>:null}{index>0&&(!imageSrc||failedImage===imageSrc)?<p className="data-muted">配图已隐藏或不可用，已自动收起图片区。</p>:null}{index>0&&!getShareEnBattle(report,copy,index)?<p className="data-muted">情绪条尚未就绪，请查看生成日志。重新生成 ShareEn 会尝试补齐；“补齐配图”只处理照片。</p>:null}{error?<p className="data-error" role="alert">{error}</p>:null}</section>;
 }

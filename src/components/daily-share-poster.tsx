@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { WccatDailyReport } from '@/lib/daily-report';
 import type { DailyShareCopy, ShareLanguage } from '@/lib/daily-share-copy';
 import { sentimentLabel } from '@/lib/sentiment';
+import {CommentQuotes} from './comment-quotes';
 
 const labels = {
  zh: {radar:'中文互联网 · 每日观察',ranking:'过去 24 小时 TOP 10',analysis:'TOP 1 · 完整 AI 分析',summary:'话题摘要',detail:'详细分析',context:'背景与文化语境',platforms:'各平台态度',evidence:'依据',confidence:'置信度',metrics:'日榜信号',score:'日榜分',peak:'峰值排名',heat:'峰值热度',samples:'采样次数',sources:'来源数量',change:'分析变化',unavailable:'该话题暂无完整 AI 分析',footer:'WcCAT · What Chinese Care About Today',window:'采集窗口',generated:'生成时间',observation:'榜单信号观察，不代表全体用户的观点',red:'红侧',blue:'蓝侧',neutral:'中立',provider:'分析模型'},
@@ -43,6 +44,7 @@ export function DailySharePoster({report,copy,language}:{report:WccatDailyReport
       <section className="share-analysis-block"><h4>{t.summary}</h4><p>{text?.summary??copy.topics[0].oneLine}</p></section>
       {analysis && text ? <>
        <section className="share-versus"><div className="share-versus-labels"><strong>{text.battle.redLabel}</strong><em>VS</em><strong>{text.battle.blueLabel}</strong></div><div className="share-energy"><div style={{flex:Math.max(0,analysis.battle.redScore)}}/><div style={{flex:Math.max(0,analysis.battle.blueScore)}}/><b>{analysis.battle.redScore}</b><b>{analysis.battle.blueScore}</b></div><div className="share-rationales"><p>{text.battle.redRationale}</p><p>{text.battle.blueRationale}</p></div></section>
+       <CommentQuotes examples={analysis.commentExamples} battle={analysis.battle} language={language}/>
        <section className="share-analysis-block"><h4>{t.detail}</h4><p>{text.detailedContent}</p></section>
        <section className="share-analysis-block"><h4>{t.context}</h4><p>{text.outsiderContext}</p></section>
        <section className="share-analysis-block"><h4>{t.platforms}</h4><div className="share-platforms">{analysis.platformAnalyses.map((platform,index)=>{

@@ -173,7 +173,7 @@ export function AdminSharingPanel({date,revision,disabled,onDateChange,onGenerat
     const files=[];
     for(const card of cards) {
      const index=Number(card.dataset.shareenIndex);
-     const blob=await toBlob(card,{width:1200,height:1500,pixelRatio:1,backgroundColor:'#ffffff',skipFonts:true,includeQueryParams:true,filter:node=>!(node instanceof HTMLImageElement)||Boolean(node.complete&&node.naturalWidth),fetchRequestInit:{signal:AbortSignal.timeout(10000)}});
+     const blob=await toBlob(card,{width:1200,height:Number(card.dataset.shareenHeight)||1500,pixelRatio:1,backgroundColor:'#ffffff',skipFonts:true,includeQueryParams:true,filter:node=>!(node instanceof HTMLImageElement)||Boolean(node.complete&&node.naturalWidth),fetchRequestInit:{signal:AbortSignal.timeout(10000)}});
      if(!blob)throw new Error(`卡片 ${String(index+1).padStart(2,'0')} 导出失败。`);
      const name=`${String(index+1).padStart(2,'0')}-${index===0?'overview':'deep-dive'}.png`;
      if(request.index!==undefined)downloadBlob(blob,`WcCAT-ShareEn-${date}-${name}`);
@@ -215,7 +215,7 @@ export function AdminSharingPanel({date,revision,disabled,onDateChange,onGenerat
     </>:<>
      <div className="admin-sharing-actions"><SharingGenerationButton busy={busy} dirty={dirty} onClick={()=>generate('shareen',Boolean(report.shareEn))}>{report.shareEn?'重新生成 ShareEn · AI':'生成 ShareEn · AI'}</SharingGenerationButton><SharingGenerationButton busy={busy} dirty={dirty} disabled={!copy} onClick={()=>generate('images',false)}>补齐配图</SharingGenerationButton><button type="button" className="data-primary" disabled={busy||!copy} onClick={()=>download({kind:'shareen'})}>{exporting?'正在导出…':'↓ 下载整套 ZIP'}</button></div>
      {copy?<>
-      <p className="data-muted">1200 × 1500 · 三行品牌标题 + 原始榜单 + 海外图片焦点卡 · 通栏 1072 × 360 / 完整分栏 400 × 480 · ZIP 包含有序 PNG、所选焦点配文、alt text、来源与统计窗口。</p>
+      <p className="data-muted">1200 × 1500（有热评时 1200 × 1900–2200）· 三行品牌标题 + 原始榜单 + 海外图片焦点卡 · 通栏 1072 × 360 / 完整分栏 400 × 480 · ZIP 包含有序 PNG、所选焦点配文、alt text、来源与统计窗口。</p>
       {dirty?<p className="shareen-unsaved">有未保存编辑。预览与下载使用当前编辑稿；点击保存后写入日报。请先保存编辑，再生成分享内容或处理配图。</p>:null}
       {conflict?<div className="data-warning" role="alert"><p>服务器上的日报或 ShareEn 已更新。本地编辑已保留；当前预览仍对应编辑时的日报。请先下载或复制需要保留的内容，再载入最新版本后编辑。</p><button type="button" disabled={busy} onClick={reloadDraft}>放弃本地编辑，载入最新版本</button></div>:null}
       <div className="shareen-preview-grid">{Array.from({length:copy.highlights.length+1},(_,index)=><ShareEnPreviewCard key={index} report={report} copy={copy} index={index} disabled={busy} processingDisabled={generationDisabled} onReprocess={index>0?()=>generate('images',true,copy.highlights[index-1].topicId):undefined} onDownload={()=>download({kind:'shareen',index})}/>)}</div>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getChinaDateTime } from "@/lib/date";
 import { InsightImage } from "@/components/insight-image";
+import {CommentQuotes} from './comment-quotes';
 import { normalizeExternalUrl } from "@/lib/links";
 import { inferSentiment, sentimentLabel } from "@/lib/sentiment";
 import { buildFallbackTopicAnalysis, type TopicAnalysis } from "@/lib/topic-analysis";
@@ -364,6 +365,8 @@ function TopicInsight({
           <p>{analysis.battle.blueRationale}</p>
         </div>
       </section>
+
+      <CommentQuotes examples={analysis.commentExamples} battle={analysis.battle}/>
 
       <section className="insight-block">
         <span className="card-label">Analysis</span>

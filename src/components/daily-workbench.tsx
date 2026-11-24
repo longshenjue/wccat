@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getChinaDateTime } from "@/lib/date";
 import { InsightImage } from "@/components/insight-image";
+import {CommentQuotes} from './comment-quotes';
 import type { DailyReportTopic, WccatDailyReport } from "@/lib/daily-report";
 import { sentimentLabel } from "@/lib/sentiment";
 
@@ -219,6 +220,8 @@ function DailyTopicInsight({ topic }: { topic: DailyReportTopic }) {
           <p>{blueRationale}</p>
         </div>
       </section>
+
+      <CommentQuotes examples={analysis?.commentExamples} battle={analysis?.battle}/>
 
       <section className="insight-block">
         <span className="card-label">Analysis</span>

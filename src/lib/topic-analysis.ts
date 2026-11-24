@@ -1,6 +1,7 @@
 import type { Sentiment, TopicGroup, TopicOccurrence } from "./types";
 import { inferSentiment, sentimentLabel } from "./sentiment";
 import type { ArticleContext } from "./fulltext";
+import type {CommentExamples} from './comments/types';
 
 export type BattleStance = {
   redLabel: string;
@@ -21,6 +22,7 @@ export type PlatformAnalysis = {
 };
 
 export type TopicAnalysis = {
+  commentExamples?: CommentExamples;
   summary: string;
   detailedContent: string;
   outsiderContext: string;
