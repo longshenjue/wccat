@@ -2,7 +2,8 @@ import type { WccatDailyReport } from './daily-report';
 import type { ShareEnCopy } from './shareen-types';
 import type { ZipEntry } from './client-zip';
 import {shareEnImage} from './shareen-media';
-import {getShareEnBattle} from './shareen-battle';
+import {buildChineseDailyCards,getDailyCardBattle} from './daily-bilingual-cards';
+import type {ShareLanguage} from './daily-share-copy';
 import {shareEnCommentSource} from './comments/sharing';
 import {visibleCommentQuotes,excerptComment} from './comments/selection';
 import {shareEnOverviewAltText} from './shareen-overview';
@@ -19,11 +20,19 @@ export function fitShareEnCard(card: HTMLElement, identity: string): boolean {
 }
 
 /** Keep user descriptions, replacing only our reserved generated debate suffix. */
-function currentAltText(report:WccatDailyReport,copy:ShareEnCopy,index:number,text:string):string {
+function currentAltText(report:WccatDailyReport,copy:ShareEnCopy,index:number,text:string,language:ShareLanguage='en'):string {
+ if(language==='zh'){
+  const battle=getDailyCardBattle(report,copy,index,language);
+  const energy=battle?` AI 相对情绪能量（来源分析，非民调）：${battle.redLabel} ${battle.redScore}，${battle.blueLabel} ${battle.blueScore}。${battle.redRationale} ${battle.blueRationale}`:'';
+  const source=shareEnCommentSource(report,copy,index,language);
+  const rows=source?visibleCommentQuotes(source.examples,source.battle,language):[];
+  const comments=rows.map(({side,quote,text})=>`${side==='red'?'红侧':'蓝侧'}原文：“${excerptComment(text,'zh').text}”（${quote.sourceName}${quote.likes!==undefined?`，${quote.likes} 赞`:''}）。`).join(' ');
+  return `${text}${energy}${comments?` 评论摘选（非民调）：${comments}`:''}`;
+ }
  // Retire only the old auto-generated three-signal description; preserve custom ALT edits.
  if(index===0&&copy.layout==='editorial'&&text.startsWith(`WcCAT, ${report.reportDate}. Selected signals from China's internet:`))return shareEnOverviewAltText(report,copy.overview.topics);
  const base=text.replace(/\sDebate energy \((?:existing (?:AI )?analysis|AI estimate)\):[^\n]*$/u,'');
- const battle=getShareEnBattle(report,copy,index);if(!battle)return base;
+ const battle=getDailyCardBattle(report,copy,index);if(!battle)return base;
  const energy=`Debate energy (${battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${battle.redLabel} ${battle.redScore}, ${battle.blueLabel} ${battle.blueScore}. ${battle.redRationale} ${battle.blueRationale}`;
  const source=shareEnCommentSource(report,copy,index),rows=source?visibleCommentQuotes(source.examples,source.battle,'en'):[];
  if(!rows.length)return `${base} ${energy}`;
@@ -31,33 +40,44 @@ function currentAltText(report:WccatDailyReport,copy:ShareEnCopy,index:number,te
  return `${base.slice(0,260)} ${energy.slice(0,180)} Sampled comments (AI-translated excerpts, not a poll): ${comments}`;
 }
 
-export function shareEnTextFiles(report: WccatDailyReport, copy: ShareEnCopy): ZipEntry[] {
+export function shareEnTextFiles(report: WccatDailyReport, englishCopy: ShareEnCopy, language:ShareLanguage='en'): ZipEntry[] {
+ const copy=language==='zh'?buildChineseDailyCards(report,englishCopy):englishCopy;
+ const en=language==='en';
  const selected = copy.posts.find(post => post.id === copy.selectedPostId);
- if (!selected) throw new Error('请先选择有效的英文配文。');
+ if (!selected) throw new Error(en?'请先选择有效的英文配文。':'中文配文尚未准备好。');
  const texts = [
   {name: 'post.txt', text: selected.text + '\n'},
-  {name: 'alt-text.txt', text: copy.altTexts.map((text,index)=>`${String(index+1).padStart(2,'0')} · ${currentAltText(report,copy,index,text)}`).join('\n\n')+'\n'},
+  {name: 'alt-text.txt', text: copy.altTexts.map((text,index)=>`${String(index+1).padStart(2,'0')} · ${currentAltText(report,copy,index,text,language)}`).join('\n\n')+'\n'},
   {name: 'sources.txt', text: [
-   'WcCAT Daily Hot · ShareEn', report.reportDate,
-   `Collection window: ${report.windowStart} → ${report.windowEnd} (UTC+8)`,
-   'Observed platform ranking signals, not a population survey or independently verified reporting.',
+   en?'WcCAT Daily Hot · ShareEn':'WcCAT 今日热点 · 中文卡片', report.reportDate,
+   `${en?'Collection window':'统计窗口'}: ${report.windowStart} → ${report.windowEnd} (UTC+8)`,
+   en?'Observed platform ranking signals, not a population survey or independently verified reporting.':'内容来自已保存日报与平台榜单。榜单信号与 AI 情绪能量不代表民调或独立核实报道。',
    '', ...report.topics.slice(0,10).flatMap(topic=>[
-    `Original rank #${topic.rank}: ${topic.title}`,
+    `${en?'Original rank':'原榜'} #${topic.rank}: ${topic.title}`,
     ...topic.links.map(link=>`${link.sourceName}: ${link.url}`), ''
    ]),
-   'Focus card image URLs:',...(copy.highlights??[]).map((_,index)=>{const image=shareEnImage(report,copy,index+1);return `Card ${String(index+2).padStart(2,'0')}: ${image?.url??(copy.highlights[index].hideImage?'Image hidden by administrator':'No approved image available')}`;}),
-   'Focus card debate energy:',...(copy.highlights??[]).map((h,index)=>{const battle=getShareEnBattle(report,copy,index+1);return `Original rank #${report.topics.find(t=>t.id===h.topicId)?.rank??'?'}: ${battle?`${battle.redLabel} ${battle.redScore} vs ${battle.blueLabel} ${battle.blueScore} (${battle.basis==='analysis'?'existing analysis':'AI estimate'}; relative energy, not a poll)`:'Attitude analysis unavailable'}`;}),
+   en?'Focus card image URLs:':'精选详情卡配图 URL：',...(copy.highlights??[]).map((_,index)=>{const image=shareEnImage(report,copy,index+1);return `${en?'Card':'卡片'} ${String(index+2).padStart(2,'0')}: ${image?.url??(copy.highlights[index].hideImage?(en?'Image hidden by administrator':'管理员已隐藏配图'):(en?'No approved image available':'无可用的已审核配图'))}`;}),
+   en?'Focus card debate energy:':'精选详情卡 AI 相对情绪能量：',...(copy.highlights??[]).map((h,index)=>{const battle=getDailyCardBattle(report,copy,index+1,language);return `${en?'Original rank':'原榜'} #${report.topics.find(t=>t.id===h.topicId)?.rank??'?'}: ${battle?`${battle.redLabel} ${battle.redScore} ${en?'vs':'对'} ${battle.blueLabel} ${battle.blueScore} (${en?(battle.basis==='analysis'?'existing analysis':'AI estimate'):'来源分析'}; ${en?'relative energy, not a poll':'相对能量，非民调'})`:(en?'Attitude analysis unavailable':'无可用情绪分析')}`;}),
    ...(copy.highlights??[]).flatMap((_,index)=>{
-    const source=shareEnCommentSource(report,copy,index+1);if(!source)return [];
-    return visibleCommentQuotes(source.examples,source.battle,'en').flatMap(({side,quote})=>[
-     `Card ${index+2} sampled ${side} comment (${source.examples!.sampleCount} sampled; not a poll):`,
-     `ID: ${quote.id}`,`Source: ${quote.url}`,`Observed: ${quote.observedAt}`,`Likes: ${quote.likes??'not provided'}`,
-     `Original: ${quote.text}`,`AI translation${quote.englishIsExcerpt?' (source excerpt)':''}: ${quote.englishText}`
+    const source=shareEnCommentSource(report,copy,index+1,language);if(!source)return [];
+    return visibleCommentQuotes(source.examples,source.battle,language).flatMap(({side,quote})=>[
+     en?`Card ${index+2} sampled ${side} comment (${source.examples!.sampleCount} sampled; not a poll):`:`卡片 ${index+2} ${side==='red'?'红侧':'蓝侧'}评论（采样 ${source.examples!.sampleCount} 条；非民调）：`,
+     `ID: ${quote.id}`,`${en?'Source':'来源'}: ${quote.url}`,`${en?'Observed':'采集时间'}: ${quote.observedAt}`,`${en?'Likes':'点赞'}: ${quote.likes??(en?'not provided':'未提供')}`,
+     `${en?'Original':'原文'}: ${quote.text}`,...(en?[`AI translation${quote.englishIsExcerpt?' (source excerpt)':''}: ${quote.englishText}`]:[])
     ]);
    })
   ].join('\n')}
  ];
  return texts.map(({name,text})=>({name,data:new TextEncoder().encode(text)}));
+}
+
+/** Flat ASCII names work with the strict STORE ZIP encoder on every platform. */
+export function dailyCardFilename(index:number,language:ShareLanguage):string {
+ return `${language}-${String(index+1).padStart(2,'0')}-${index===0?'overview':'deep-dive'}.png`;
+}
+
+export function bilingualDailyTextFiles(report:WccatDailyReport,copy:ShareEnCopy):ZipEntry[] {
+ return (['en','zh'] as const).flatMap(language=>shareEnTextFiles(report,copy,language).map(file=>({...file,name:`${language}-${file.name}`})));
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

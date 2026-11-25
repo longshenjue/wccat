@@ -61,10 +61,10 @@ test('ShareEn captions describe selected focus cards while highlights keep their
    attempts=0;globalThis.fetch=async()=>{attempts++;return Response.json({choices:[{message:{content:'{}'}}]});};
    assert.equal(await generateShareEn(report),undefined);assert.equal(attempts,2);
   });
-  await t.test('HTTP errors do not retry and fewer than two topics skip the model',async()=>{
+  await t.test('HTTP errors do not retry and empty reports skip the model',async()=>{
    let attempts=0;globalThis.fetch=async()=>{attempts++;return new Response('',{status:503});};
    assert.equal(await generateShareEn(report),undefined);assert.equal(attempts,1);
-   assert.equal(await generateShareEn({...report,topics:report.topics.slice(0,1)}),undefined);assert.equal(attempts,1);
+   assert.equal(await generateShareEn({...report,topics:[]}),undefined);assert.equal(attempts,1);
   });
  }finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=oldKey;}
 });

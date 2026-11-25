@@ -28,7 +28,11 @@ test('admin sharing authenticates cached reads and bounds same-origin mutations'
   const cached=await get('2025-09-01');
   assert.equal(cached.status,200);assert.equal(cached.headers.get('cache-control'),'no-store');
   const cachedPayload=await cached.json();
-  assert.deepEqual(cachedPayload.report,original);
+  const {sharingSourceFingerprint,...cachedReport}=cachedPayload.report;
+  const {sourceFingerprint:reportFingerprint}=await import('../src/lib/shareen');
+  assert.equal(sharingSourceFingerprint,reportFingerprint(original));
+  assert.deepEqual(cachedReport,original);
+  assert.deepEqual(ctx.readDailyReportFromDb(original.reportDate),original,'read-only transport identity must not write into the saved report');
   assert.match(cachedPayload.shareEnRevision,/^[a-f0-9]{64}$/);assert.equal(aiCalls,0);
   assert.equal((await get('2026-02-30')).status,400);
   assert.equal((await get('2025-09-02')).status,404);

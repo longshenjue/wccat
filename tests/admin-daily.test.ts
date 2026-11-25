@@ -51,7 +51,7 @@ test('daily admin jobs overwrite populated reports, expose partial translation f
   assert.equal(finished.result.daily?.englishReady,false);
   assert.equal(db.readDailyReportFromDb('2025-11-13')?.headline,'新日报');
   assert.equal(db.readDailyReportFromDb('2025-11-13')?.shareEnglish,undefined);
-  assert.equal(calls,2);
+  assert.equal(calls,3,'Chinese draft, English translation and the now-supported single-story card attempt each stay bounded');
   const messages=readJobLogs(id).entries.map(line=>line.message).join('\n');
   assert.match(messages,/Top10/);
   assert.match(messages,/中文.*保存|保存.*中文/);

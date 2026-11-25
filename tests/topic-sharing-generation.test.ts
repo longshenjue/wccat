@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {generateTopicShare} from '../src/lib/topic-sharing/generation';
 import type {TopicShareSource} from '../src/lib/topic-sharing/types';
 import {spaceContent,spaceSource} from './helpers/topic-sharing-space-fixture';
+import {bathhouseContent,bathhouseSource} from './helpers/topic-sharing-bathhouse-fixture';
 
 function source():TopicShareSource {
  return {ref:{kind:'daily',date:'2026-11-24',topicId:'battery'},sourceKey:'daily:battery',fingerprint:'a'.repeat(64),date:'2026-11-24',observedAt:'2026-11-24T01:00:00.000Z',topicId:'battery',title:'汽车厂商公布电池升级计划',summary:'厂商公布电池升级计划，具体安排仍待说明。',detail:'相关报道描述了电池升级安排，目前材料没有提供价格与发布时间。',context:'从已保存报道了解厂商计划，不能把计划当成已经落地的产品。',categories:['科技','汽车'],rank:1,signal:'相关报道进入榜单',links:[{sourceId:'zhihu',sourceName:'知乎',title:'电池升级计划',url:'https://www.zhihu.com/question/123'}]};
@@ -151,5 +152,61 @@ test('a single numerical repair batches nested English post and Chinese reply fi
    return response({patches:[{path:'zh.replies[0]',text:original.zh.replies[0]},{path:'en.posts[1].text',text:original.en.posts[1].text}]});
   }});
   assert.equal(calls,2);assert.deepEqual(generated.en,original.en);assert.deepEqual(generated.zh,original.zh);
+ }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
+});
+
+test('missing-comment claims receive one targeted repair against explicit evidence availability',async()=>{
+ const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
+ try{
+  const value=bathhouseSource();
+  const before=structuredClone(value),initial=bathhouseContent();initial.en.context='The comments show that viewers envy the facilities.';
+  const fixed='The saved material contains no viewer comments, so audience reactions remain unverified.';
+  let calls=0;
+  const generated=await generateTopicShare(value,{column:'inside',fetch:async(_url,options)=>{
+   const request=JSON.parse(String(options?.body)),payload=JSON.parse(request.messages.at(-1).content);
+   assert.deepEqual(payload.source.commentEvidenceAvailable,{en:false,zh:false});
+   if(++calls===1)return response(initial);
+   assert.equal(payload.task,'repair_evidence_fields');
+   assert.deepEqual(payload.issues.map((issue:{path:string})=>issue.path),['en.context']);
+   assert.ok(request.max_tokens<=3000);
+   return response({patches:[{path:'en.context',text:fixed}]});
+  }});
+  assert.equal(calls,2);assert.deepEqual(value,before);assert.deepEqual(generated.zh,initial.zh);
+  assert.deepEqual({...generated.en,context:initial.en.context},initial.en);assert.equal(generated.en.context,fixed);
+ }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
+});
+
+test('comment and numeric failures share the same repair budget including when the same field fails both',async()=>{
+ const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
+ try{
+  const initial=content();initial.en.summary='The comments show support from 999 people.';initial.zh.replies[0]='网友表示升级安排很实惠。';
+  let calls=0;
+  const generated=await generateTopicShare(source(),{fetch:async(_url,options)=>{
+   if(++calls===1)return response(initial);
+   const payload=JSON.parse(JSON.parse(String(options?.body)).messages.at(-1).content);
+   assert.deepEqual([...new Set(payload.issues.map((issue:{path:string})=>issue.path))].sort(),['en.summary','zh.replies[0]']);
+   return response({patches:[{path:'en.summary',text:content().en.summary},{path:'zh.replies[0]',text:content().zh.replies[0]}]});
+  }});
+  assert.equal(calls,2);assert.deepEqual(generated.en,content().en);assert.deepEqual(generated.zh,content().zh);
+ }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
+});
+
+test('a failed comment repair cannot start a third request or replace an unrelated field',async()=>{
+ const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
+ try{
+  for(const patch of [{path:'en.context',text:'The comments still show support.'},{path:'zh.context',text:'未知安排仍待确认。'},{path:'en.context',text:'The plan reaches 999 people.'}]){
+   const initial=content();initial.en.context='The comments show support.';let calls=0;
+   await assert.rejects(generateTopicShare(source(),{fetch:async()=>response(++calls===1?initial:{patches:[patch]})}));
+   assert.equal(calls,2);
+  }
+ }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
+});
+
+test('quotation and comment failures together stop before repair instead of rewriting unsupported quotations',async()=>{
+ const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
+ try{
+  const initial=content();initial.en.context='The comments show support.';initial.en.summary='A commenter said “The plan is perfect.”';let calls=0;
+  await assert.rejects(generateTopicShare(source(),{fetch:async()=>{calls++;return response(initial);}}),/quot/i);
+  assert.equal(calls,1);
  }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
 });

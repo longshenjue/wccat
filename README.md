@@ -156,6 +156,8 @@ open a topic from hourly/daily history, choose a named column, generate and edit
 copy, then export PNGs and a source-backed ZIP. Recommendations cover the selected
 day and yesterday without AI calls. English daily packages show the complete Top10
 ranking overview and three supported focus stories; legacy saved packages remain readable.
+The same selected stories also have a [native Chinese four-card edition](docs/daily-bilingual-cards.md).
+The bilingual ZIP contains separate English and Chinese post packages, each with its own images, caption, ALT and sources.
 The [X editorial research](docs/x-editorial-patterns.md) records public examples,
 evidence limits and the copy patterns being tested, without promising viral reach.
 Hourly and daily selection use [platform tiers and bounded contributions](docs/daily-ranking.md):

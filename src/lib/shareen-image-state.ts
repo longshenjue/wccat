@@ -1,7 +1,8 @@
 import sharp from 'sharp';
 import {createHash} from 'node:crypto';
 import type {WccatDailyReport} from './daily-report';
-import {getValidShareEn} from './shareen';
+import {getValidShareEn,sourceFingerprint} from './shareen';
+import type {DailyCardSource} from './daily-bilingual-cards';
 import {shareEnOriginalImage} from './shareen-media';
 import {validateImageAsset,type ShareEnImageAsset} from './shareen-image-types';
 import type {ShareEnCopy} from './shareen-types';
@@ -76,12 +77,13 @@ export function restoreGeneratedImages(report:WccatDailyReport,copy:ShareEnCopy,
  return restoreImageAssets(report,{...copy,highlights},previous,{previousReport});
 }
 
-export function sharingReportForClient(report:WccatDailyReport):WccatDailyReport {
- if(!report.shareEn)return report;
+export function sharingReportForClient(report:WccatDailyReport):DailyCardSource {
+ const sharingSourceFingerprint=sourceFingerprint(report);
+ if(!report.shareEn)return {...report,sharingSourceFingerprint};
  // Also redact malformed optional caches in legacy / imported JSON.
  const shareEn=JSON.parse(JSON.stringify(report.shareEn,(key,value)=>{
   if(key==='imageAsset')return storedImage(value)?.asset;
   return key==='dataBase64'?undefined:value;
  })) as ShareEnCopy;
- return {...report,shareEn};
+ return {...report,shareEn,sharingSourceFingerprint};
 }

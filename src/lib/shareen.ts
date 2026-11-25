@@ -12,7 +12,7 @@ export type {ShareEnValidationOptions} from './shareen-validation';
 
 /** A Chinese revision's identity never changes merely because either sharing format is saved. */
 export function sourceFingerprint(report:WccatDailyReport):string {
- const source=Object.fromEntries(Object.entries(report).filter(([key])=>key!=='shareEn'&&key!=='shareEnglish'));
+ const source=Object.fromEntries(Object.entries(report).filter(([key])=>!['shareEn','shareEnglish','sharingSourceFingerprint'].includes(key)));
  return createHash('sha256').update(JSON.stringify(canonical(source))).digest('hex');
 }
 /** Optimistic concurrency token for the exact saved cache, including edits and regenerated copies. */
@@ -37,7 +37,7 @@ export function getValidShareEn(report:WccatDailyReport):ShareEnCopy|undefined {
 /** A missing or failed optional version leaves the daily report usable. No new factual research is performed. */
 export async function generateShareEn(report:WccatDailyReport,log?:GenerationLog):Promise<ShareEnCopy|undefined>{
  const emit=(level:'info'|'warn',message:string)=>log?log(level,message):console[level]('[WcCAT] '+redactJobMessage(message));
- if(report.topics.length<2){emit('info','ShareEn 材料不足两个话题，已跳过');return undefined;}
+ if(!report.topics.length){emit('info','ShareEn 没有日榜话题，已跳过');return undefined;}
  const cached=getValidShareEn(report);if(cached)return cached;
  const supportedTopicIds=shareEnSupportedTopicIds(report);
  if(!supportedTopicIds.length){emit('info','ShareEn 仅有标题，缺少可支持故事卡的事实材料，已跳过');return undefined;}

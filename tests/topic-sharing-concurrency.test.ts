@@ -13,6 +13,12 @@ test('late topic-share generation cannot overwrite edits, source changes or a ma
   const source=service.loadTopicShareSource(ref),copy=topicShareCopy(source),first=service.persistTopicShare(source,copy,'none');
   let calls=0;
   const cached=await service.generateSavedTopicShare(ref,{fetch:async()=>{calls++;throw Error('must not call AI for cache');}});assert.equal(cached.revision,first.revision);assert.equal(calls,0);
+  const beforeRepair=service.readTopicShare(first.id);let repairCalls=0;
+  await assert.rejects(service.generateSavedTopicShare(ref,{force:true,expectedRevision:first.revision,fetch:async()=>{
+   repairCalls++;
+   return Response.json({choices:[{message:{content:JSON.stringify(repairCalls===1?{column:'inside',en:{...copy.en,context:'The comments show support.'},zh:copy.zh}:{patches:[{path:'en.context',text:'Users strongly support the plan.'}]})}}]});
+  }}),/comment.*evidence/i);
+  assert.equal(repairCalls,2);assert.deepEqual(service.readTopicShare(first.id),beforeRepair,'a failed repair must preserve the exact saved draft and revision');
   const response=()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({column:'inside',en:copy.en,zh:copy.zh})}}]});
   await assert.rejects(service.generateSavedTopicShare(ref,{force:true,expectedRevision:first.revision,fetch:async()=>{
    service.saveTopicShareEdits(first.id,{...copy,en:{...copy.en,headline:'Newer manual edit'}},first.revision);return response();

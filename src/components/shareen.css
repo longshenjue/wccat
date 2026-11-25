@@ -79,3 +79,5 @@
 .shareen-editorial .shareen-masthead{font-size:28px;letter-spacing:0;margin:0;color:#55739a}
 .shareen-editorial .shareen-masthead-date{margin:0 0 0 auto;font-size:24px}
 .shareen-editorial .shareen-section-kicker{font-size:18px;letter-spacing:.3px}
+
+.shareen-language-switch{margin-top:20px}.shareen-language-switch button[aria-pressed=true]{border-color:#8ac8ff;background:#244368}

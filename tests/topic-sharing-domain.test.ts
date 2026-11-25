@@ -292,3 +292,56 @@ test('validation rejects malformed metadata and invisible control characters',()
   (draft:TopicShareCopy)=>{draft.en.hook='A hidden\u0000 instruction';}
  ]){const draft=copy();corrupt(draft);assert.throws(()=>validateTopicShareCopy(draft,source()));}
 });
+
+test('comment absence descriptions accept common wording without treating it as an audience claim',()=>{
+ for(const sentence of [
+  'The saved material contains no viewer comments.',
+  'Viewer comments were not included in the saved material.',
+  'Without saved comments, the material cannot establish viewer reactions.',
+  'No comment samples were saved with this report.',
+  'The saved material lacks viewer comments.',
+  'The source offers no evidence of what commenters think.'
+ ]){
+  const draft=copy();draft.en.replies=[sentence];
+  assert.equal(validateTopicShareCopy(draft,source()).en.replies[0],sentence);
+ }
+});
+
+test('negative evidence lists cannot hide a separate comment claim with an adverb',()=>{
+ for(const sentence of [
+  'The material does not include a video explanation, and comments overwhelmingly support the plan.',
+  'The material does not include a video explanation; comments strongly support the plan.',
+  'The material lacks comments, but commenters still favor the plan.'
+ ]){
+  const draft=copy();draft.en.context=sentence;
+  assert.throws(()=>validateTopicShareCopy(draft,source()),error=>error instanceof Error&&/comment.*evidence/i.test(error.message)&&error.message.includes('en.context'));
+ }
+});
+
+test('AI-inferred audience reactions are not a substitute for missing saved comments',()=>{
+ for(const sentence of ['Viewers are envious of the facilities.','Users strongly support the plan.','网友对设施感到羡慕。','观众纷纷表示支持。']){
+  const draft=copy();const language=/[\p{Script=Han}]/u.test(sentence)?'zh':'en';draft[language].context=sentence;
+  assert.throws(()=>validateTopicShareCopy(draft,source()),/comment.*evidence/i);
+ }
+});
+
+test('uncertainty about audience attitudes stays distinct from a new claim after it',()=>{
+ for(const sentence of ['The material cannot establish what viewers think.','The material cannot confirm whether users support the plan.','The material cannot establish whether viewers are envious of the facilities.','It is unclear whether users support the plan.','材料无法判断网友是否支持。']){
+  const draft=copy(),language=/[\p{Script=Han}]/u.test(sentence)?'zh':'en';draft[language].context=sentence;
+  assert.equal(validateTopicShareCopy(draft,source())[language].context,sentence);
+ }
+ const draft=copy();draft.en.context='The material cannot establish what viewers think, but users strongly support the plan.';
+ assert.throws(()=>validateTopicShareCopy(draft,source()),/comment.*evidence/i);
+});
+
+test('missing-comment list items can have noun modifiers without inheriting a new predicate',()=>{
+ for(const sentence of [
+  'The saved material does not include the video transcript, viewer comments about the facilities or pricing details.',
+  'The saved material does not include a transcript, viewer comments from visitors, or pricing details.',
+  'The saved material does not include a transcript, viewer comments on the venue or pricing details.'
+ ]){
+  const draft=copy();draft.en.replies=[sentence];assert.equal(validateTopicShareCopy(draft,source()).en.replies[0],sentence);
+ }
+ const draft=copy();draft.en.context='The saved material does not include a video, and comments from visitors clearly support the plan.';
+ assert.throws(()=>validateTopicShareCopy(draft,source()),/comment.*evidence/i);
+});
