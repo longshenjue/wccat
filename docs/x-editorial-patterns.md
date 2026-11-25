@@ -101,10 +101,11 @@ require the account's own observed analytics.
 
 ## Applying this in WcCAT
 
-- Daily English edition: editorial opener plus up to three source-supported
-  stories. Three usable stories produce four images; sparse evidence is never
-  padded. The opener shows selected signals and context; the complete original
-  Top10 order and source links remain traceable in the saved data/export.
+- Daily English edition: complete Top10 ranking overview plus up to three
+  source-supported detail cards. Three usable stories produce four images; sparse
+  evidence never pads the detail cards or removes other headlines from the overview.
+  The overview marks selected stories while preserving the complete original rank
+  order; source links remain traceable in the saved data/export.
   Generation assigns this layout on the server even if the model omits its flag;
   already-saved editions without `layout: 'editorial'` retain their legacy contract.
 - Independent story angles use **Inside China's Internet**, **In Their Words**

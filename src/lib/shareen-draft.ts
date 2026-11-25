@@ -5,6 +5,7 @@ import {readShareEnCaptionLine} from './shareen-caption';
 import {recommendTopic,eligibleColumns} from './topic-sharing/recommendation';
 import {columnForLanguage} from './topic-sharing/columns';
 import type {TopicShareSource} from './topic-sharing/types';
+import {shareEnOverviewAltText} from './shareen-overview';
 import {topicEvidenceTexts} from './topic-sharing/evidence';
 
 type Fields=Record<string,unknown>;
@@ -164,6 +165,6 @@ export function completeShareEnDraft(state:ShareEnDraftState,report:WccatDailyRe
   const entries=top3.map((t,i)=>`${['1️⃣','2️⃣','3️⃣'][i]} ${t.summary}`).join('\n');
   return {id,template:typeof p.template==='string'&&p.template.trim()?p.template.trim():'daily_digest',reason:typeof p.reason==='string'&&p.reason.trim()?p.reason.trim():'The selected focus stories.',text:editorial?`${hook}\n\n${entries}\n\nWcCAT: China, in context. Read the cards; source links in sources.txt.`:`WcCAT Daily Hot\n\n${hook}\n\n${entries}\n\nWcCAT: read the cards. CHINA, IN CONTEXT.`};
  });
- const opener=editorial?`WcCAT, ${report.reportDate}. Selected signals from China's internet: ${highlights.map(h=>`${columnForLanguage(h.column!,'en')}: ${h.hook}. ${h.whyItMatters}`).join(' ')} Full original ranking and source links are in sources.txt.`:`WcCAT Daily Hot, ${report.reportDate}. China’s Top ${topics.length}: ${topics.map(t=>t.title).join('; ')}.`;
+ const opener=editorial?shareEnOverviewAltText(report,topics):`WcCAT Daily Hot, ${report.reportDate}. China’s Top ${topics.length}: ${topics.map(t=>t.title).join('; ')}.`;
  return {...(editorial?{layout:'editorial' as const}:{}),captionBasis:'highlights',overview:{headline:editorial?'China, beyond the headlines':`China’s Top ${topics.length}`,summary:editorial?'Selected signals, with the context to understand them.':'',topics},highlights,top3,posts,selectedPostId:typeof state.selectedPostId==='string'&&seen.has(state.selectedPostId)?state.selectedPostId:posts[0].id,altTexts:[opener,...highlights.map(h=>`${h.column?columnForLanguage(h.column,'en')+'. ':''}${h.hook}. ${h.whatHappened} ${h.whyItMatters}${h.battle?` Debate energy (${h.battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${h.battle.redLabel} ${h.battle.redScore}, ${h.battle.blueLabel} ${h.battle.blueScore}. ${h.battle.redRationale} ${h.battle.blueRationale}`:''}`)]};
 }

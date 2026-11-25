@@ -984,8 +984,9 @@ function extractEngagementStats(item: UnknownRecord): EngagementStats | undefine
       getNumber(item, ["danmaku", "danmakuCount"]) ??
       getNestedNumber(item, ["stat", "stats", "count_info"], ["danmaku", "danmakuCount"])
   };
+  // An observed zero belongs in the source-local comparison pool; missing stays undefined.
   const cleaned = Object.fromEntries(
-    Object.entries(stats).filter(([, value]) => typeof value === "number" && Number.isFinite(value) && value > 0)
+    Object.entries(stats).filter(([, value]) => typeof value === "number" && Number.isFinite(value) && value >= 0)
   ) as EngagementStats;
 
   return Object.keys(cleaned).length > 0 ? cleaned : undefined;

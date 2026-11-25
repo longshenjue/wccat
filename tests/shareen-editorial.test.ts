@@ -35,10 +35,33 @@ test('editorial daily packages keep the original Top10 while exporting a hook-fi
  assert.deepEqual(validateShareEn(copy,report),copy);
  assert.ok(validateShareEn(updateShareEnTop3(copy,1,'Edited selected story'),report));
  const first=renderToStaticMarkup(createElement(ShareEnPoster,{report,copy,index:0}));
- assert.match(first,/China Tech, in Context/);assert.match(first,/Inside China(?:&#x27;|')s Internet/);
- assert.match(first,/The detail behind story 3/);assert.doesNotMatch(first,/Saved story 10|ORIGINAL DAILY RANKING/);
+ assert.match(first,/Saved story 10/);assert.match(first,/ORIGINAL DAILY RANKING/);
+ assert.equal([...first.matchAll(/<li\b/gu)].length,10);
+ assert.match(copy.altTexts[0],/Saved story 10/);
  const files=shareEnTextFiles(report,copy),sources=files.find(f=>f.name==='sources.txt')!;
  assert.match(new TextDecoder().decode(sources.data),/Original rank #10: 生活话题10/);
+});
+
+test('the overview keeps all ten edited titles in original rank order while marking the three focus stories',()=>{
+ const report=source(),copy=assembled(report,['story-2','story-7','story-9']);
+ copy.overview.topics[8].title='Edited ninth story';
+ const first=renderToStaticMarkup(createElement(ShareEnPoster,{report,copy,index:0}));
+ const rows=[...first.matchAll(/<li\b[^>]*><b>(\d+)<\/b><span>([^<]+)<\/span>/gu)].map(match=>[match[1],match[2]]);
+ assert.deepEqual(rows,[['01','Saved story 1'],['02','Saved story 2'],['03','Saved story 3'],['04','Saved story 4'],['05','Saved story 5'],['06','Saved story 6'],['07','Saved story 7'],['08','Saved story 8'],['09','Edited ninth story'],['10','Saved story 10']]);
+ assert.deepEqual([...first.matchAll(/<li class="shareen-picked"><b>(\d+)<\/b>/gu)].map(match=>match[1]),['02','07','09']);
+ assert.equal(copy.highlights.length+1,4);
+});
+
+test('existing editorial drafts export a ranking description without regeneration and retain custom alt text',()=>{
+ const report=source(),copy=assembled(report);
+ copy.altTexts[0]="WcCAT, 2026-11-24. Selected signals from China's internet: three focus stories. Full original ranking and source links are in sources.txt.";
+ const before=JSON.stringify(copy);
+ const alt=()=>new TextDecoder().decode(shareEnTextFiles(report,copy).find(file=>file.name==='alt-text.txt')!.data).split('\n\n')[0];
+ assert.match(alt(),/Saved story 10/);assert.match(alt(),/Saved story 8/);
+ assert.doesNotMatch(alt(),/Selected signals from/);
+ assert.equal(JSON.stringify(copy),before,'exporting must not write back into the saved draft');
+ copy.altTexts[0]='My own description of the complete daily ranking.';
+ assert.match(alt(),/My own description of the complete daily ranking/);
 });
 
 test('editorial selection asks for three supported stories and never pads headline-only sources',()=>{
@@ -47,6 +70,7 @@ test('editorial selection asks for three supported stories and never pads headli
  const sparse=source();for(const topic of sparse.topics.slice(2)){topic.oneLine=topic.title;topic.whyItMatters='';delete topic.aiAnalysis;}
  const copy=assembled(sparse,['story-1','story-2']);
  assert.equal(copy.highlights.length+1,3);assert.deepEqual(copy.highlights.map(h=>h.topicId),['story-1','story-2']);
+ assert.equal([...renderToStaticMarkup(createElement(ShareEnPoster,{report:sparse,copy,index:0})).matchAll(/<li\b/gu)].length,10,'headline-only topics still belong in the full ranking');
  assert.throws(()=>completeShareEnDraft(readShareEnDraft(raw(sparse,['story-1','story-2','story-3']),sparse),sparse),/selection|highlightIds/i);
 });
 
@@ -114,7 +138,7 @@ test('generation owns editorial layout when a legacy-shaped model response omits
  try{
   const copy=await generateShareEn(report);assert.ok(copy);assert.equal(copy.layout,'editorial');assert.equal(copy.highlights.length+1,4);
   assert.ok(copy.posts.every(p=>!p.text.startsWith('WcCAT Daily Hot')));
-  const opener=renderToStaticMarkup(createElement(ShareEnPoster,{report,copy,index:0}));assert.doesNotMatch(opener,/Saved story 10|ORIGINAL DAILY RANKING/);
+  const opener=renderToStaticMarkup(createElement(ShareEnPoster,{report,copy,index:0}));assert.match(opener,/Saved story 10/);assert.match(opener,/ORIGINAL DAILY RANKING/);
  }finally{globalThis.fetch=previousFetch;if(previousKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previousKey;}
 });
 

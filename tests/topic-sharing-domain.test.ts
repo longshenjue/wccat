@@ -7,6 +7,7 @@ import type {TopicShareCopy,TopicShareSource} from '../src/lib/topic-sharing/typ
 import {snapshot} from './helpers/data-fixtures';
 import {summarizeTopic} from '../src/lib/summary';
 import {buildFallbackTopicAnalysis} from '../src/lib/topic-analysis';
+import {spaceContent,spaceSource} from './helpers/topic-sharing-space-fixture';
 
 function source():TopicShareSource {
  return {ref:{kind:'daily',date:'2026-11-24',topicId:'battery'},sourceKey:'daily:battery',fingerprint:'a'.repeat(64),date:'2026-11-24',observedAt:'2026-11-24T01:00:00.000Z',topicId:'battery',title:'汽车厂商公布电池升级计划',summary:'厂商公布电池升级计划，具体安排仍待说明。',detail:'相关报道描述了电池升级安排，目前材料没有提供价格与发布时间。',context:'从已保存报道了解厂商计划，不能把计划当成已经落地的产品。',categories:['科技','汽车'],rank:1,signal:'相关报道进入榜单',links:[{sourceId:'zhihu',sourceName:'知乎',title:'电池升级计划',url:'https://www.zhihu.com/question/123'}]};
@@ -162,6 +163,13 @@ test('validation rejects stale source identity and unavailable column choices',(
  assert.equal(validateTopicShareCopy(voices,withComment()).column,'voices');
  const life=source();life.title='社区服务调整';life.categories=['生活'];
  assert.throws(()=>validateTopicShareCopy(copy(),life),/column/i);
+});
+
+test('Shenzhou-24 and November 24 preserve their Chinese numbers while failures name the exact field and quantity',()=>{
+ const value=spaceSource(),content=spaceContent(),draft={...content,version:1,generatedAt:value.observedAt,model:'test',sourceFingerprint:value.fingerprint};
+ assert.equal(validateTopicShareCopy(draft,value).en.summary,content.en.summary);
+ draft.en.hook='One astronaut, a Chinese poem and a cultural connection.';
+ assert.throws(()=>validateTopicShareCopy(draft,value),(error:unknown)=>error instanceof Error&&/en\.hook/.test(error.message)&&/\b1\b/.test(error.message));
 });
 test('validation requires English without Han and independently localized Chinese content',()=>{
  const han=copy();han.en.summary='An update with 中文 mixed in.';

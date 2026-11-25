@@ -51,14 +51,27 @@ function localized(value:unknown,language:TopicShareLanguage):LocalizedTopicShar
   altText:text(data.altText,language+'.altText',1000,language)
  };
 }
-function visibleTexts(copy:LocalizedTopicShare):string[]{
- return [copy.headline,copy.hook,copy.summary,copy.context,copy.whyItMatters,copy.question,...copy.posts.map(post=>post.text),...copy.replies,copy.altText];
+function visibleTexts(copy:LocalizedTopicShare,language:TopicShareLanguage):Array<{path:string;body:string}>{
+ return [...(['headline','hook','summary','context','whyItMatters','question','altText'] as const).map(field=>({path:`${language}.${field}`,body:copy[field]})),...copy.posts.map((post,index)=>({path:`${language}.posts[${index}].text`,body:post.text})),...copy.replies.map((body,index)=>({path:`${language}.replies[${index}]`,body}))];
 }
-function containsAll<T>(source:T[],target:T[],key:(value:T)=>string=String):boolean {
- const allowed=new Set(source.map(key));return target.every(value=>allowed.has(key(value)));
+function missingFacts<T>(source:T[],target:T[],key:(value:T)=>string=String):T[] {
+ const allowed=new Set(source.map(key));return [...new Map(target.filter(value=>!allowed.has(key(value))).map(value=>[key(value),value])).values()];
 }
-function groundedNumbers(source:NumericalFacts,target:NumericalFacts):boolean {
- return containsAll(source.numbers,target.numbers)&&containsAll(source.ratios,target.ratios,value=>JSON.stringify(value))&&containsAll(source.seasons,target.seasons)&&containsAll(source.dates,target.dates)&&Object.entries(target.roles).every(([role,values])=>containsAll(source.roles[role]??[],values));
+export type TopicShareNumericIssue={path:string;unsupported:NumericalFacts};
+export class TopicShareNumericalError extends Error {
+ constructor(readonly issues:TopicShareNumericIssue[]){
+  const details=issues.slice(0,8).map(({path,unsupported})=>{
+   const values=[...unsupported.numbers.map(value=>value.replace(/\/1$/u,'')),...unsupported.ratios.map(value=>`${value.bound} ratio ${value.value}`),...unsupported.dates,...unsupported.seasons.map(value=>`season ${value}`),...Object.entries(unsupported.roles).flatMap(([role,values])=>values.map(value=>`${role} ${value}`))];
+   return `${path} (${values.slice(0,8).map(value=>value.slice(0,80)).join(', ')})`;
+  });
+  super(`Ungrounded numerical fact or number role: ${details.join('; ')}`);
+  this.name='TopicShareNumericalError';
+ }
+}
+function unsupportedNumbers(source:NumericalFacts,target:NumericalFacts):NumericalFacts|undefined {
+ const roles=Object.fromEntries(Object.entries(target.roles).map(([role,values])=>[role,missingFacts(source.roles[role]??[],values)]).filter(([,values])=>values.length));
+ const result={numbers:missingFacts(source.numbers,target.numbers),ratios:missingFacts(source.ratios,target.ratios,value=>JSON.stringify(value)),seasons:missingFacts(source.seasons,target.seasons),dates:missingFacts(source.dates,target.dates),roles};
+ return result.numbers.length||result.ratios.length||result.seasons.length||result.dates.length||Object.keys(roles).length?result:undefined;
 }
 function sourceFacts(source:TopicShareSource):string {
  return [source.title,source.summary,source.detail,source.context,source.analysis?.summary,source.analysis?.detailedContent,source.analysis?.outsiderContext,...source.links.map(link=>link.title),...(['en','zh'] as const).flatMap(language=>usableTopicQuotes(source,language).map(item=>item.text))].filter(Boolean).join('\n');
@@ -101,24 +114,27 @@ export function validateTopicShareCopy(value:unknown,source:TopicShareSource):To
  const column=data.column as EditorialColumn,en=localized(data.en,'en'),zh=localized(data.zh,'zh');
  const facts=sourceFacts(source),allowedFacts=copyNumericalFacts(facts);
  const allowedLinks=new Set(source.links.map(link=>link.url));
+ const numericalIssues:TopicShareNumericIssue[]=[];
  for(const language of ['en','zh'] as const){
   const localizedCopy=language==='en'?en:zh,quotes=usableTopicQuotes(source,language);
   for(const post of localizedCopy.posts){
    if(post.pattern==='source_voice'&&!quotes.length)throw new Error('Source voice pattern requires saved comment evidence');
    if(post.pattern==='number_context'&&!allowedFacts.numbers.length&&!allowedFacts.ratios.length)throw new Error('Number pattern requires source numerical evidence');
   }
-  for(const body of visibleTexts(localizedCopy)){
+  for(const {path,body} of visibleTexts(localizedCopy,language)){
    for(const match of body.matchAll(/https?:\/\/[^\s<>"“”]+/giu)){
     const url=match[0].replace(/[.,;!?，。；！？)）]+$/u,'');
     if(!allowedLinks.has(url))throw new Error('Unapproved source URL in generated copy');
    }
    if(/(?:javascript|data|file):|(?:www\.)[^\s]+/i.test(body))throw new Error('Unapproved source link in generated copy');
-   if(!groundedNumbers(allowedFacts,copyNumericalFacts(body)))throw new Error(`Ungrounded numerical fact or number role: ${language}`);
+   const unsupported=unsupportedNumbers(allowedFacts,copyNumericalFacts(body));
+   if(unsupported)numericalIssues.push({path,unsupported});
    if(/\b(?:most|all|every|half of|a majority of)\s+(?:Chinese\s+)?(?:users?|buyers?|people|consumers?|netizens?|citizens?)\b|(?:所有|全部|大多数|多数|全民|全国人民|全中国)(?:的)?(?:用户|消费者|买家|网民|人|都)|全(?:中国|国)都/i.test(body))throw new Error('Unsupported representative population claim');
    const quotations=[...body.matchAll(/“([^”]+)”|「([^」]+)」|『([^』]+)』|"([^"\n]+)"|(?:^|\s)'([^'\n]+)'/gu)].map(match=>match.slice(1).find(Boolean)!);
    if(quotations.some(quote=>column==='voices'||!facts.includes(quote)))throw new Error('Model quotations are not source-owned comment evidence');
    if(!quotes.length&&unsupportedCommentClaim(body))throw new Error('Comment claim lacks usable saved source evidence');
   }
  }
+ if(numericalIssues.length)throw new TopicShareNumericalError(numericalIssues);
  return {version:1,generatedAt,model,sourceFingerprint:data.sourceFingerprint,column,en,zh};
 }

@@ -5,6 +5,7 @@ import {shareEnImage} from './shareen-media';
 import {getShareEnBattle} from './shareen-battle';
 import {shareEnCommentSource} from './comments/sharing';
 import {visibleCommentQuotes,excerptComment} from './comments/selection';
+import {shareEnOverviewAltText} from './shareen-overview';
 
 /** Measure at export size. All text remains visible, including when it cannot fit. */
 export function fitShareEnCard(card: HTMLElement, identity: string): boolean {
@@ -19,6 +20,8 @@ export function fitShareEnCard(card: HTMLElement, identity: string): boolean {
 
 /** Keep user descriptions, replacing only our reserved generated debate suffix. */
 function currentAltText(report:WccatDailyReport,copy:ShareEnCopy,index:number,text:string):string {
+ // Retire only the old auto-generated three-signal description; preserve custom ALT edits.
+ if(index===0&&copy.layout==='editorial'&&text.startsWith(`WcCAT, ${report.reportDate}. Selected signals from China's internet:`))return shareEnOverviewAltText(report,copy.overview.topics);
  const base=text.replace(/\sDebate energy \((?:existing (?:AI )?analysis|AI estimate)\):[^\n]*$/u,'');
  const battle=getShareEnBattle(report,copy,index);if(!battle)return base;
  const energy=`Debate energy (${battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${battle.redLabel} ${battle.redScore}, ${battle.blueLabel} ${battle.blueScore}. ${battle.redRationale} ${battle.blueRationale}`;

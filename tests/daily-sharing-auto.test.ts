@@ -13,7 +13,8 @@ test('daily generation saves aligned focus captions and repaired emotional strip
  process.env.DEEPSEEK_API_KEY='test-auto-sharing-key';
  try{
   const sample=snapshot('2025-11-13-12','2025-11-13T04:00:00Z');
-  sample.topics=Array.from({length:4},(_,index)=>{const topic=structuredClone(sample.topics[0]);topic.id='story-'+index;topic.title='测试故事'+index;topic.normalizedTitle=topic.title;topic.rank=index+1;topic.heatScore=100-index;topic.occurrences[0].title=topic.title;topic.occurrences[0].normalizedTitle=topic.title;return topic;});
+  sample.topics=Array.from({length:4},(_,index)=>{const topic=structuredClone(sample.topics[0]);topic.id='story-'+index;topic.title='测试故事'+index;topic.normalizedTitle=topic.title;topic.rank=index+1;topic.heatScore=100-index;topic.occurrences[0].title=topic.title;topic.occurrences[0].normalizedTitle=topic.title;topic.occurrences[0].rank=index+1;topic.occurrences.push({...topic.occurrences[0],sourceId:'baidu',sourceName:'百度热搜',sourceCategory:'search',url:`https://example.test/baidu/${index}`});topic.sources=['微博','百度热搜'];return topic;});
+  sample.rawItems=sample.topics.flatMap(topic=>topic.occurrences);
   sample.topics[0].occurrences[0].cover='https://i0.hdslb.com/daily.png';
   sample.topics[3].occurrences[0].cover='https://i0.hdslb.com/new-topic.png';
   const png=await sharp({create:{width:20,height:30,channels:3,background:'red'}}).png().toBuffer();

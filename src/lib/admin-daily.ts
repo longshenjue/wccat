@@ -2,6 +2,7 @@ import {readDailyReportFromDb} from './db';
 import {getChinaSnapshotId} from './date';
 import {parseDailyReportDate} from './daily-window';
 import {readDailyReportInput} from './daily-report-input';
+import {buildDailyTopTopics} from './daily-report';
 
 export function dailyGenerationPreview(value:unknown,now=new Date()) {
  const cutoff=parseDailyReportDate(value);
@@ -9,7 +10,7 @@ export function dailyGenerationPreview(value:unknown,now=new Date()) {
  const existing=readDailyReportFromDb(reportDate);
  return {
   reportDate,windowStart:getChinaSnapshotId(start),windowEnd:getChinaSnapshotId(end),
-  snapshotCount:snapshots.length,hasTopics:snapshots.some(snapshot=>snapshot.topics.length>0),
+  snapshotCount:snapshots.length,hasTopics:buildDailyTopTopics(snapshots,()=>({})).length>0,
   existing:Boolean(existing),existingGeneratedAt:existing?.generatedAt,
   ...collection
  };

@@ -73,23 +73,9 @@
 .shareen-story-split>.shareen-explainer,.shareen-compact .shareen-story-split>.shareen-explainer{margin:0;min-width:0}
 .shareen-story-split .shareen-cover img{max-width:none;flex-shrink:0}
 
-/* Editorial editions lead with three readable signals; the complete ranking stays in the package. */
+/* A compact masthead leaves room for every ranked title in editorial overviews. */
 .shareen-editorial .shareen-overview-header{display:flex;align-items:baseline;gap:24px;flex-wrap:wrap}
 .shareen-editorial .shareen-overview-header .shareen-brand strong{font-size:42px;letter-spacing:-2px}
 .shareen-editorial .shareen-masthead{font-size:28px;letter-spacing:0;margin:0;color:#55739a}
 .shareen-editorial .shareen-masthead-date{margin:0 0 0 auto;font-size:24px}
-.shareen-opener-intro{margin:12px 0 30px}
-.shareen-card .shareen-opener-intro h1{font-size:76px;line-height:1.06;max-width:900px;margin-bottom:18px}
-.shareen-opener-intro>p{font-size:28px;color:#55739a;line-height:1.4}
-.shareen-signals{list-style:none;padding:0;margin:0}
-.shareen-signals>li{padding:24px 0;border-top:1px solid #dce7f5}
-.shareen-signal-heading{display:flex;align-items:baseline;gap:18px;color:#347ce0;margin-bottom:12px}
-.shareen-signal-heading>b{font-size:23px;color:#ff315f}
-.shareen-signal-heading>span{font-size:19px;font-weight:700;letter-spacing:.5px}
-.shareen-card .shareen-signals h2{margin:0 0 10px;font-size:39px;line-height:1.17;letter-spacing:-.7px;color:#14335c;overflow-wrap:anywhere}
-.shareen-signals p{font-size:28px;line-height:1.35;color:#55739a}
 .shareen-editorial .shareen-section-kicker{font-size:18px;letter-spacing:.3px}
-.shareen-editorial.shareen-compact .shareen-opener-intro h1{font-size:66px}
-.shareen-editorial.shareen-compact .shareen-signals>li{padding:19px 0}
-.shareen-editorial.shareen-compact .shareen-signals h2{font-size:35px}
-.shareen-editorial.shareen-compact .shareen-signals p{font-size:25px}

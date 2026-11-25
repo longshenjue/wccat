@@ -27,6 +27,7 @@ export interface SourceConfig {
   displayName: string;
   category: SourceCategory;
   kind: SourceKind;
+  /** Legacy metadata; platform-tier-v3 uses explicit tier caps instead. */
   weight: number;
   primaryUrl: string;
   thirdPartyUrl?: string;
@@ -71,7 +72,14 @@ export interface EngagementStats {
 export interface TopicOccurrence extends RawHotItem {
   normalizedTitle: string;
   platformScore: number;
+  platformScoring?: PlatformScoreEvidence;
 }
+
+export type PlatformTier='S'|'A'|'B'|'C'|'D';
+export type PlatformScoreEvidence={
+  policy:'platform-tier-v3';tier:PlatformTier;cap:number;strength:number;
+  rankStrength:number;heatStrength?:number;engagementStrength?:number;
+};
 
 export interface TopicGroup {
   supplementalEvidence?: SupplementalEvidence[];

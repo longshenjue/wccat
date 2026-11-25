@@ -24,12 +24,16 @@ import {enrichTopicComments} from './comments/runtime';
 import {buildFallbackTopicAnalysis} from './topic-analysis';
 import { redactJobMessage } from "./log-redaction";
 import type { DailySnapshot, Sentiment, TopicGroup, TopicOccurrence } from "./types";
+import {dailyCoverageSlot,dailyPlatformRank,dailyRankingEvidence,selectDailyCandidates,type DailyRankingEvidence,type DailyRankingObservation} from './daily-ranking';
+import {getSourceById} from './sources';
+import {platformItemKey,scorePlatformItems} from './platform-ranking';
 
 export type DailyReportTopic = {
   id: string;
   rank: number;
   title: string;
   dailyScore: number;
+  rankingEvidence?: DailyRankingEvidence;
   peakRank: number;
   peakHeatScore: number;
   /** Legacy field: observation count, not elapsed hours. Retained for archived reports. */
@@ -78,9 +82,8 @@ type TopicBucket = {
   topics: TopicGroup[];
   occurrences: TopicOccurrence[];
   snapshotDates: Set<string>;
-  sources: Set<string>;
+  rankingObservations: DailyRankingObservation[];
   categories: Set<string>;
-  totalHeat: number;
   peakHeatScore: number;
   peakRank: number;
   peakSnapshotDate?: string;
@@ -97,9 +100,17 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
   log('info', `开始生成 ${reportDate} 日报，统计窗口 ${getChinaSnapshotId(start)}:00 → ${getChinaSnapshotId(end)}:00 UTC+8`);
   if(!collection.complete)log('warn', `提前生成：统计窗口未结束，仅使用截至 ${collection.observedUntil} 的采样`);
   log('info', `已读取 ${snapshots.length} 次采样，正在汇总 Top10`);
+  const sourceCoverage=new Map<string,Set<string>>();
+  for(const snapshot of snapshots)for(const item of snapshot.rawItems){
+    const dates=sourceCoverage.get(item.sourceId)??new Set<string>();dates.add(snapshot.date);sourceCoverage.set(item.sourceId,dates);
+  }
+  const coverageIds=new Set(['weibo','baidu','douyin','toutiao',...sourceCoverage.keys()]);
+  log('info',`来源覆盖：${[...coverageIds].map(id=>`${getSourceById(id)?.displayName??id} ${sourceCoverage.get(id)?.size??0}/${snapshots.length}`).join('；')}`);
   const topics = buildDailyTopTopics(snapshots,date=>analyses[date]??{}).slice(0, 10);
   if(options.requireData && (!snapshots.length || !topics.length)) throw new Error('该统计窗口没有有效快照或话题，已有日报保持不变。');
+  if(snapshots.length&&!topics.length)throw new Error('该窗口缺少符合综合日报规则的话题，已有日报保持不变。');
   log('info', `Top10 汇总完成：${topics.length} 个话题`);
+  log('info',`排序依据 platform-tier-v3：跨平台 ${topics.filter(topic=>topic.rankingEvidence?.basis==='cross-platform').length} 条，单平台 ${topics.filter(topic=>topic.rankingEvidence?.basis==='single-platform').length} 条；互动仅作站内相对排名，各平台全天贡献不超过本档上限`);
   const top = topics[0];
   if (top && (!top.aiAnalysis || top.aiAnalysis.model === "local-rules") && top.analysisSnapshotDate) {
     const snapshot = snapshots.find(value=>value.date===top.analysisSnapshotDate);
@@ -186,9 +197,19 @@ export function buildDailyTopTopics(snapshots: DailySnapshot[],analysisReader=re
   const medianGap = gaps.length % 2 ? gaps[middle] : (gaps[middle - 1] + gaps[middle]) / 2;
   const sampleWeight = gaps.length ? Math.min(4, medianGap) : 1;
 
+  const totalSlots=new Set(snapshotDates.map(dailyCoverageSlot)).size;
+  const availableBySource=new Map<string,Set<string>>();
   for (const snapshot of snapshots) {
-    for (const topic of snapshot.topics.slice(0, 30)) {
+    // Recompute archived captures from raw rank/stat evidence, never from their old scores.
+    const scored=scorePlatformItems([...snapshot.rawItems,...snapshot.topics.flatMap(topic=>topic.occurrences)]);
+    const scoringByKey=new Map(scored.map(item=>[platformItemKey(item),item.platformScoring!]));
+    for(const item of scored){
+      const slots=availableBySource.get(item.sourceId)??new Set<string>();
+      slots.add(dailyCoverageSlot(snapshot.date));availableBySource.set(item.sourceId,slots);
+    }
+    for (const topic of snapshot.topics) {
       const key = normalizeTitle(topic.normalizedTitle || topic.title);
+      if(!key)continue;
       const bucket =
         buckets.get(key) ??
         ({
@@ -198,9 +219,8 @@ export function buildDailyTopTopics(snapshots: DailySnapshot[],analysisReader=re
           topics: [],
           occurrences: [],
           snapshotDates: new Set<string>(),
-          sources: new Set<string>(),
+          rankingObservations: [],
           categories: new Set<string>(),
-          totalHeat: 0,
           peakHeatScore: 0,
           peakRank: Number.POSITIVE_INFINITY,
           peakSnapshotDate: undefined,
@@ -210,9 +230,12 @@ export function buildDailyTopTopics(snapshots: DailySnapshot[],analysisReader=re
       bucket.topics.push(topic);
       bucket.occurrences.push(...topic.occurrences);
       bucket.snapshotDates.add(snapshot.date);
-      topic.sources.forEach((source) => bucket.sources.add(source));
+      for(const occurrence of topic.occurrences){
+        const platformScoring=scoringByKey.get(platformItemKey(occurrence));
+        if(!platformScoring||dailyPlatformRank(occurrence)===undefined)continue;
+        bucket.rankingObservations.push({snapshotDate:snapshot.date,occurrence:{...occurrence,platformScoring,platformScore:platformScoring.cap*platformScoring.strength}});
+      }
       topic.categories.forEach((category) => bucket.categories.add(category));
-      bucket.totalHeat += topic.heatScore * recencyMultiplier(snapshot.date, snapshots);
       bucket.peakHeatScore = Math.max(bucket.peakHeatScore, topic.heatScore);
       bucket.peakRank = Math.min(bucket.peakRank, topic.rank);
       if (topic.heatScore >= bucket.peakHeatScore) {
@@ -228,19 +251,25 @@ export function buildDailyTopTopics(snapshots: DailySnapshot[],analysisReader=re
 
   const analysisCache = new Map<string, ReturnType<typeof readTopicAnalysesForDate>>();
 
-  return [...buckets.values()]
-    .map(bucket => toDailyReportTopic(bucket, snapshotDates.length, sampleWeight))
+  return selectDailyCandidates([...buckets.values()]
+    .map(bucket => toDailyReportTopic(bucket, snapshotDates.length, sampleWeight,totalSlots,availableBySource))
+    .filter((topic):topic is DailyReportTopic=>topic!==null))
     .map((topic) => attachTopicAnalysis(topic, analysisCache,analysisReader))
     .sort((left, right) => right.dailyScore - left.dailyScore)
     .map((topic, index) => ({ ...topic, rank: index + 1 }));
 }
 
-function toDailyReportTopic(bucket: TopicBucket, totalSamples: number, sampleWeight: number): DailyReportTopic {
-  const sourceDiversity = Math.min(bucket.sources.size, 6) * 120;
-  const persistence = Math.min(24, bucket.snapshotDates.size * sampleWeight) * 60;
-  const peakBonus = Math.max(0, 11 - bucket.peakRank) * 80;
-  const dailyScore = Math.round(bucket.totalHeat / 12 + sourceDiversity + persistence + peakBonus);
-  const uniqueLinks = uniqueOccurrences(bucket.occurrences).slice(0, 6);
+function toDailyReportTopic(bucket: TopicBucket, totalSamples: number, sampleWeight: number,totalSlots:number,availableBySource:Map<string,Set<string>>): DailyReportTopic|null {
+  const rankingEvidence=dailyRankingEvidence(bucket.rankingObservations,availableBySource,totalSlots);
+  if(!rankingEvidence)return null;
+  const dailyScore=rankingEvidence.score;
+  const byPlatform=new Map<string,TopicOccurrence>();
+  for(const item of bucket.occurrences){
+    const rank=dailyPlatformRank(item),previous=byPlatform.get(item.sourceId);
+    if(rank===undefined||!rankingEvidence.platforms.includes(item.sourceId))continue;
+    if(rank<(previous?dailyPlatformRank(previous)!:Infinity))byPlatform.set(item.sourceId,item);
+  }
+  const uniqueLinks=[...byPlatform.values()].sort((a,b)=>dailyPlatformRank(a)!-dailyPlatformRank(b)!).slice(0,6);
   const firstTopic = bucket.topics[0];
   const coverOccurrence = bucket.occurrences.find((item) => item.cover);
 
@@ -249,12 +278,13 @@ function toDailyReportTopic(bucket: TopicBucket, totalSamples: number, sampleWei
     rank: 0,
     title: bucket.title,
     dailyScore,
+    rankingEvidence,
     peakRank: Number.isFinite(bucket.peakRank) ? bucket.peakRank : 0,
     peakHeatScore: bucket.peakHeatScore,
     activeHours: bucket.snapshotDates.size,
     sampleCount: bucket.snapshotDates.size,
     sampleCoverage: bucket.snapshotDates.size / totalSamples,
-    sources: [...bucket.sources],
+    sources: rankingEvidence.platforms.map(id=>getSourceById(id)!.displayName),
     categories: [...bucket.categories],
     sentiment: bucket.sentiment,
     signal: inferDailySignal(bucket, sampleWeight),
@@ -290,15 +320,6 @@ function attachTopicAnalysis(
 
   const aiAnalysis = analyses[topic.analysisTopicId];
   return aiAnalysis ? { ...topic, aiAnalysis } : topic;
-}
-
-function recencyMultiplier(snapshotDate: string, snapshots: DailySnapshot[]) {
-  const index = snapshots.findIndex((snapshot) => snapshot.date === snapshotDate);
-  if (index < 0 || snapshots.length <= 1) {
-    return 1;
-  }
-
-  return 0.85 + (index / (snapshots.length - 1)) * 0.3;
 }
 
 async function generateDrafts(
@@ -450,19 +471,6 @@ function inferDailySignal(bucket: TopicBucket, sampleWeight: number): DailyRepor
   }
 
   return "long-tail";
-}
-
-function uniqueOccurrences(occurrences: TopicOccurrence[]) {
-  const seen = new Set<string>();
-
-  return occurrences.filter((item) => {
-    const key = `${item.sourceId}-${item.url || item.title}`;
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
 }
 
 function textOr(value: unknown, fallback: string) {

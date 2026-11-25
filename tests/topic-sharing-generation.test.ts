@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateTopicShare} from '../src/lib/topic-sharing/generation';
 import type {TopicShareSource} from '../src/lib/topic-sharing/types';
+import {spaceContent,spaceSource} from './helpers/topic-sharing-space-fixture';
 
 function source():TopicShareSource {
  return {ref:{kind:'daily',date:'2026-11-24',topicId:'battery'},sourceKey:'daily:battery',fingerprint:'a'.repeat(64),date:'2026-11-24',observedAt:'2026-11-24T01:00:00.000Z',topicId:'battery',title:'汽车厂商公布电池升级计划',summary:'厂商公布电池升级计划，具体安排仍待说明。',detail:'相关报道描述了电池升级安排，目前材料没有提供价格与发布时间。',context:'从已保存报道了解厂商计划，不能把计划当成已经落地的产品。',categories:['科技','汽车'],rank:1,signal:'相关报道进入榜单',links:[{sourceId:'zhihu',sourceName:'知乎',title:'电池升级计划',url:'https://www.zhihu.com/question/123'}]};
@@ -77,8 +78,7 @@ test('DeepSeek generation is bounded, source-grounded and returns server-owned m
     ()=>Response.json({choices:[{message:{content:''}}]}),
     ()=>response({...content(),links:source().links}),
     ()=>response({...content(),generatedAt:'1900-01-01T00:00:00.000Z'}),
-    ()=>response({...content(),column:'inside'}),
-    ()=>response({...content(),en:{...content().en,summary:'It reaches two million users.'}})
+    ()=>response({...content(),column:'inside'})
    ]){
     let calls=0;const logs:string[]=[];
     await assert.rejects(generateTopicShare(source(),{fetch:async()=>{calls++;return makeResponse();},log:(_level,message)=>logs.push(message)}));
@@ -98,4 +98,58 @@ test('DeepSeek generation is bounded, source-grounded and returns server-owned m
   if(previousKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previousKey;
   if(previousModel===undefined)delete process.env.DEEPSEEK_MODEL;else process.env.DEEPSEEK_MODEL=previousModel;
  }
+});
+
+test('a numeric-only rejection repairs only the failing text once and validates against the same frozen source',async()=>{
+ const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
+ try{
+  const value=spaceSource(),before=structuredClone(value),initial=spaceContent();
+  initial.en.hook='One astronaut, a Chinese poem and a cultural connection.';
+  const logs:string[]=[];let calls=0;
+  const generated=await generateTopicShare(value,{log:(_level,message)=>logs.push(message),fetch:async(_url,options)=>{
+   calls++;if(calls===1)return response(initial);
+   const request=JSON.parse(String(options?.body)),repair=JSON.parse(request.messages.at(-1).content);
+   assert.equal(repair.task,'repair_numerical_fields');
+   assert.equal(repair.source.title,value.title);assert.equal(repair.draft.en.hook,initial.en.hook);
+   assert.deepEqual(repair.issues.map((issue:{path:string})=>issue.path),['en.hook']);
+   assert.ok(request.max_tokens<=3000);
+   return response({patches:[{path:'en.hook',text:'A Pakistani astronaut, a Chinese poem and a cultural connection.'}]});
+  }});
+  assert.equal(calls,2);assert.deepEqual(value,before);
+  assert.equal(generated.en.hook,'A Pakistani astronaut, a Chinese poem and a cultural connection.');
+  assert.deepEqual({...generated.en,hook:initial.en.hook},initial.en);assert.deepEqual(generated.zh,initial.zh);
+  assert.ok(logs.some(message=>message.includes('en.hook')));assert.ok(!logs.join('').includes('topic-test-secret'));
+ }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
+});
+
+test('an unsuccessful numeric repair never triggers a third call or returns unsupported facts',async()=>{
+ const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
+ try{
+  for(const repaired of [
+   {patches:[{path:'en.summary',text:'The product reaches three million users.'}]},
+   {patches:[{path:'zh.summary',text:'厂商已完成升级。'}]},
+   {patches:[{path:'en.summary',text:'An announced plan.'},{path:'en.summary',text:'A plan.'}]},
+   {patches:[],links:[]}
+  ]){
+   const initial=content();initial.en.summary='The product reaches two million users.';
+   let calls=0;
+   await assert.rejects(generateTopicShare(source(),{fetch:async()=>response(++calls===1?initial:repaired)}));
+   assert.equal(calls,2);
+  }
+ }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
+});
+
+test('a single numerical repair batches nested English post and Chinese reply fields without changing other copy',async()=>{
+ const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
+ try{
+  const original=content(),initial=structuredClone(original);let calls=0;
+  initial.en.posts[1].text='The plan reaches 999 people.';initial.zh.replies[0]='升级价格为999元。';
+  const generated=await generateTopicShare(source(),{fetch:async(_url,options)=>{
+   if(++calls===1)return response(initial);
+   const request=JSON.parse(String(options?.body)),repair=JSON.parse(request.messages.at(-1).content);
+   assert.deepEqual(repair.issues.map((issue:{path:string})=>issue.path),['en.posts[1].text','zh.replies[0]']);
+   return response({patches:[{path:'zh.replies[0]',text:original.zh.replies[0]},{path:'en.posts[1].text',text:original.en.posts[1].text}]});
+  }});
+  assert.equal(calls,2);assert.deepEqual(generated.en,original.en);assert.deepEqual(generated.zh,original.zh);
+ }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
 });

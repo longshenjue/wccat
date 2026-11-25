@@ -154,10 +154,14 @@ of this checkout. Anti-crawling issues remain open upstream, including
 Admin now supports [bilingual single-story sharing and editorial recommendations](docs/topic-sharing.md):
 open a topic from hourly/daily history, choose a named column, generate and edit EN/ZH
 copy, then export PNGs and a source-backed ZIP. Recommendations cover the selected
-day and yesterday without AI calls. New English daily packages use an editorial
-opener and three supported focus stories; legacy saved packages remain readable.
+day and yesterday without AI calls. English daily packages show the complete Top10
+ranking overview and three supported focus stories; legacy saved packages remain readable.
 The [X editorial research](docs/x-editorial-patterns.md) records public examples,
 evidence limits and the copy patterns being tested, without promising viral reach.
+Hourly and daily selection use [platform tiers and bounded contributions](docs/daily-ranking.md):
+full hourly candidate pools, within-platform engagement percentiles and hard per-platform
+ceilings. Repeated posts or captures cannot multiply a platform's contribution; single-platform
+stories remain eligible. Platform tiers distinguish provisional scale estimates from editorial overrides (Zhihu S, Douyin B).
 
 Hourly analyses, daily reports, bilingual long posters and ShareEn can show one
 actual comment per red/blue attitude beneath the analysis. Cats are editorial
