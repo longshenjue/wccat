@@ -11,6 +11,7 @@ import {ScaledPoster} from '../shareen-poster';
 import {TOPIC_SHARE_WIDTH,TopicSharePoster,topicSharePosterHeight} from './topic-share-poster';
 import {prepareTopicShareDraft} from '../../lib/topic-sharing/validation';
 import {TopicShareReview} from './topic-share-review';
+import {topicShareBaseFingerprint} from '../../lib/topic-sharing/source-identity';
 
 type TopicJob={id:string;status:string;progress?:string;error?:string;result?:{topicSharing?:{id:string}}};
 class TopicShareRequestError extends Error {constructor(message:string,readonly status:number){super(message);}}
@@ -40,7 +41,7 @@ export function TopicShareEditor({sourceRef,recordId,onClose,onRecordSaved}:Edit
  const [previewHeight,setPreviewHeight]=useState(1800);
  const current=view.key===activeKey?view:undefined,loaded=current?.data;
  const saved=loaded?.record,source=saved?.source??loaded?.source,generationSource=loaded?.source;
- const sourceChanged=Boolean(saved&&generationSource&&saved.source.fingerprint!==generationSource.fingerprint);
+ const sourceChanged=Boolean(saved&&generationSource&&topicShareBaseFingerprint(saved.source)!==topicShareBaseFingerprint(generationSource));
  const loading=!current,busy=loading||Boolean(operation)||Boolean(job);
  const editableRecord=saved&&draft?{...saved,copy:draft}:undefined;
  const local=draft?.[language],selected=local?.posts.find(post=>post.id===local.selectedPostId)??local?.posts[0];

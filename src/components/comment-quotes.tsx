@@ -1,5 +1,5 @@
 import type {CommentExamples} from '../lib/comments/types';
-import {visibleCommentQuotes,excerptComment} from '../lib/comments/selection';
+import {visibleCommentQuotes} from '../lib/comments/selection';
 
 function CatMarker({side,language}:{side:'red'|'blue';language:'zh'|'en'}){
  return <svg className="comment-cat" viewBox="0 0 64 64" role="img" aria-label={language==='en'?(side==='red'?'Red cat attitude marker':'Blue cat attitude marker'):(side==='red'?'红色小猫观点标记':'蓝色小猫观点标记')}>
@@ -19,11 +19,10 @@ export function CommentQuotes({examples,battle,language='zh',allowMixedEnglish=f
  return <section className="comment-quotes" aria-label={en?'Actual sampled comments':'实际采样评论'}>
   <div className="comment-quotes-heading"><strong>{en?'IN THEIR WORDS':'用户怎么说'}</strong><span>{en?'Selected comments':'评论摘选'}</span></div>
   <div className="comment-quotes-list">{rows.map(({side,quote,text})=>{
-   const excerpt=excerptComment(text,language);
    return <article key={side} className={`comment-quote comment-quote-${side}`}>
     <CatMarker side={side} language={language}/><div className="comment-quote-content">
-     <blockquote><p>“{excerpt.text}”</p></blockquote>
-     <div className="comment-meta"><a href={quote.url} target="_blank" rel="noreferrer">{en?names[quote.sourceId]??quote.sourceName:quote.sourceName} ↗</a>{typeof quote.likes==='number'?<span>{quote.likes.toLocaleString(en?'en-US':'zh-CN')} {en?'likes':'赞'}</span>:null}<span>{en?'AI translation':'原文'}{(excerpt.excerpt||(en&&quote.englishIsExcerpt))?(en?' · excerpt':'节选'):''}</span></div>
+     <blockquote><p>“{text}”</p></blockquote>
+     <div className="comment-meta"><a href={quote.url} target="_blank" rel="noreferrer">{en?names[quote.sourceId]??quote.sourceName:quote.sourceName} ↗</a>{typeof quote.likes==='number'?<span>{quote.likes.toLocaleString(en?'en-US':'zh-CN')} {en?'likes':'赞'}</span>:null}<span>{en?'AI translation':'原文'}{en&&quote.englishIsExcerpt?' · excerpt':''}</span></div>
     </div>
    </article>;
   })}</div>

@@ -12,6 +12,8 @@ export type TopicShareSource={
  topicId:string;title:string;summary:string;detail:string;context:string;
  categories:string[];rank:number;signal:string;links:TopicShareLink[];
  analysis?:TopicAnalysis;commentExamples?:CommentExamples;cover?:string;
+ /** Identity of the saved source before generation-time comment enrichment. Server-owned. */
+ baseFingerprint?:string;
 };
 export type TopicRecommendation={
  column:EditorialColumn;

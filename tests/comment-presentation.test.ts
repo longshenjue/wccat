@@ -13,6 +13,12 @@ import type {CommentExamples} from '../src/lib/comments/types';
 const battle={redLabel:'质疑',blueLabel:'支持'};
 const quote={id:'zhihu:1',text:'<script>不能执行的文字</script> 希望公布完整证据。',englishText:'Please publish the complete evidence.',sourceId:'zhihu',sourceName:'知乎',articleUrl:'https://www.zhihu.com/question/123',url:'https://www.zhihu.com/question/123',likes:123,rank:1,observedAt:'2026-11-24T01:00:00Z'};
 const examples:CommentExamples={...battle,red:quote,blue:{...quote,id:'zhihu:2',text:'现在的信息不足，应该等待进一步核实。',englishText:'There is too little information. Wait for verification.',likes:88},sampleCount:40,sampledAt:quote.observedAt,runIds:['source-run']};
+test('shared hourly, daily and single-story comment renderer preserves the complete saved quotation',()=>{
+ const text='请先说明实际安排，再讨论它可能带来的影响。'.repeat(8)+'这是完整原文的最后一句。';
+ const englishText=Array(10).fill('Readers need the complete source and context before judging this specific development.').join(' ');
+ const sample={...examples,blue:undefined,red:{...quote,text,englishText}};
+ for(const language of ['zh','en'] as const){const markup=renderToStaticMarkup(createElement(CommentQuotes,{examples:sample,battle,language}));assert.ok(markup.includes(language==='zh'?text:englishText));assert.doesNotMatch(markup,/…/);}
+});
 test('real examples render with cat markers, attribution, observed likes and escaped text; empty data renders nothing',()=>{
  assert.equal(renderToStaticMarkup(createElement(CommentQuotes,{battle,language:'zh'})),'');
  const markup=renderToStaticMarkup(createElement(CommentQuotes,{examples,battle,language:'zh'}));

@@ -34,7 +34,7 @@ function Story({image,text,language}:{image:ShareEnImage|undefined;text:string;l
    {/* eslint-disable-next-line @next/next/no-img-element -- Export requires a decoded same-origin image. */}
    <img data-shareen-cover src={visible.src} alt={visible.alt} onError={()=>setFailedSrc(visible.src)} style={display?{width:SPLIT_IMAGE.width,height:SPLIT_IMAGE.height,transform:`translate(${-display.left}px, ${-display.top}px)`}:undefined}/>
   </figure>:null}
-  <section className="shareen-explainer"><h2>{language==='zh'?'发生了什么 · 原文摘选':'WHAT HAPPENED'}</h2><p>{text}</p></section>
+  <section className="shareen-explainer"><h2>{language==='zh'?'发生了什么':'WHAT HAPPENED'}</h2><p>{text}</p></section>
  </div>;
 }
 
@@ -78,7 +78,7 @@ export function ShareEnPoster({report,copy:englishCopy,index,language='en'}:{rep
     <Story key={image?.src??'no-image'} image={image} text={highlight.whatHappened} language={language}/>
     {battle?<DebateStrip battle={battle} editorial={editorial} language={language}/>:null}
     {comments?<CommentQuotes {...comments} language={language}/>:null}
-    <section className="shareen-explainer shareen-why"><h2>{en?'WHY IT MATTERS':'为什么值得关注 · 原文摘选'}</h2><p>{highlight.whyItMatters}</p></section>
+    <section className="shareen-explainer shareen-why"><h2>{en?'WHY IT MATTERS':'为什么值得关注'}</h2><p>{highlight.whyItMatters}</p></section>
    </> : <>
     <div className="shareen-ranking-label"><span>{en?'THE TOP':'热点榜'} {copy.overview.topics.length}</span><span>{en?'ORIGINAL DAILY RANKING':'保留原始日榜顺序'}</span></div>
     <ol className="shareen-ranking">{copy.overview.topics.map(item=>{
@@ -136,5 +136,5 @@ export function ShareEnPreviewCard({report,copy,index,onDownload,disabled,onRepr
   host?.addEventListener('error',afterImage,true);
   return ()=>{active=false;host?.removeEventListener('load',afterImage,true);host?.removeEventListener('error',afterImage,true);};
  },[report,copy,index,identity,imageSrc]);
- return <section className="shareen-preview-card"><div className="shareen-preview-heading"><h4>{identity}</h4><div className="shareen-preview-actions">{index>0&&onReprocess?<button type="button" disabled={disabled||processingDisabled} onClick={onReprocess}>重新处理配图</button>:null}<button type="button" disabled={disabled||Boolean(error)} onClick={onDownload}>↓ PNG</button></div></div><div ref={root}><ScaledPoster width={1200} height={shareEnCanvasHeight(report,copy,index,language)}><ShareEnPoster report={report} copy={copy} index={index} language={language}/></ScaledPoster></div>{index>0&&imageSrc&&failedImage!==imageSrc?<p className="data-muted" role="status">{image?.processed?`配图已就绪 · ${image.layout==='split'?'分栏 400 × 480（完整原图）':'通栏 1072 × 360'}${asset?.reason?` · ${asset.reason}`:''}`:'原图预览 · 待处理，当前完整显示原图'}</p>:null}{index>0&&(!imageSrc||failedImage===imageSrc)?<p className="data-muted">配图已隐藏或不可用，已自动收起图片区。</p>:null}{index>0&&!getDailyCardBattle(report,copy,index,language)?<p className="data-muted">{language==='zh'?'该话题没有可用的已保存中文情绪分析，已省略情绪条。':'情绪条尚未就绪，请查看生成日志。重新生成 ShareEn 会尝试补齐；“补齐配图”只处理照片。'}</p>:null}{error?<p className="data-error" role="alert">{error}</p>:null}</section>;
+ return <section className="shareen-preview-card"><div className="shareen-preview-heading"><h4>{identity}</h4><div className="shareen-preview-actions">{index>0&&onReprocess?<button type="button" disabled={disabled||processingDisabled} onClick={onReprocess}>重新处理配图</button>:null}<button type="button" disabled={disabled||Boolean(error)} onClick={onDownload}>↓ PNG</button></div></div><div ref={root}><ScaledPoster width={1200}><ShareEnPoster report={report} copy={copy} index={index} language={language}/></ScaledPoster></div>{index>0&&imageSrc&&failedImage!==imageSrc?<p className="data-muted" role="status">{image?.processed?`配图已就绪 · ${image.layout==='split'?'分栏 400 × 480（完整原图）':'通栏 1072 × 360'}${asset?.reason?` · ${asset.reason}`:''}`:'原图预览 · 待处理，当前完整显示原图'}</p>:null}{index>0&&(!imageSrc||failedImage===imageSrc)?<p className="data-muted">配图已隐藏或不可用，已自动收起图片区。</p>:null}{index>0&&!getDailyCardBattle(report,copy,index,language)?<p className="data-muted">{language==='zh'?'该话题没有可用的已保存中文情绪分析，已省略情绪条。':'情绪条尚未就绪，请查看生成日志。重新生成 ShareEn 会尝试补齐；“补齐配图”只处理照片。'}</p>:null}{error?<p className="data-error" role="alert">{error}</p>:null}</section>;
 }

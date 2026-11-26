@@ -6,6 +6,7 @@ import {editorialShortlist} from '@/lib/topic-sharing/shortlist';
 import {recommendTopic} from '@/lib/topic-sharing/recommendation';
 import {EDITORIAL_COLUMNS} from '@/lib/topic-sharing/columns';
 import type {EditorialColumn,TopicShareCopy} from '@/lib/topic-sharing/types';
+import {topicShareBaseFingerprint} from '@/lib/topic-sharing/source-identity';
 
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
@@ -38,8 +39,8 @@ export async function POST(request:Request){
   if(body.force!==undefined&&typeof body.force!=='boolean')throw new AdminError('强制生成参数无效。');
   const ref=parseTopicShareRef(body.ref),source=loadTopicShareSource(ref);
   if(body.column!==undefined&&!EDITORIAL_COLUMNS.some(item=>item.id===body.column))throw new AdminError('未知的分享栏目。');
-  if(body.expectedSourceFingerprint!==source.fingerprint)throw new TopicSharingError('来源内容已更新，请重新载入后生成。',409);
   const current=readTopicShare(source.sourceKey),expected=current?.revision??'none';
+  if(body.expectedSourceFingerprint!==source.fingerprint&&!(current&&body.expectedSourceFingerprint===current.source.fingerprint&&topicShareBaseFingerprint(current.source)===source.fingerprint))throw new TopicSharingError('来源内容已更新，请重新载入后生成。',409);
   if(body.expectedRevision!==undefined&&body.expectedRevision!==expected)throw new TopicSharingError('分享版本已更新，请载入最新版本。',409);
   if(current&&body.force===true&&body.expectedRevision===undefined)throw new AdminError('重新生成需要当前分享版本。');
   return json({job:createJob({kind:'topic-sharing',topicRef:source.ref,column:body.column as EditorialColumn|undefined,force:body.force===true,expectedRevision:expected,expectedSourceFingerprint:source.fingerprint})},202);

@@ -22,8 +22,7 @@ import {saveSharingFields} from "./shareen-persistence";
 import { inferSentiment, sentimentLabel } from "./sentiment";
 import { analyzeTopicWithDeepSeek, type TopicAnalysis } from "./topic-analysis";
 import { fetchArticleContexts } from "./fulltext";
-import {enrichTopicComments} from './comments/runtime';
-import {buildFallbackTopicAnalysis} from './topic-analysis';
+import {enrichDailyComments,reuseDailyComments} from './comments/daily';
 import { redactJobMessage } from "./log-redaction";
 import type { DailySnapshot, Sentiment, TopicGroup, TopicOccurrence } from "./types";
 import {dailyCoverageSlot,dailyFactPeaks,dailyPlatformRank,dailyRankingEvidence,selectDailyCandidates,type DailyRankingEvidence,type DailyRankingObservation} from './daily-ranking';
@@ -110,6 +109,7 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
   const coverageIds=new Set(['weibo','baidu','douyin','toutiao',...sourceCoverage.keys()]);
   log('info',`来源覆盖：${[...coverageIds].map(id=>`${getSourceById(id)?.displayName??id} ${sourceCoverage.get(id)?.size??0}/${snapshots.length}`).join('；')}`);
   const topics = buildDailyTopTopics(snapshots,date=>analyses[date]??{}).slice(0, 10);
+  const previous=readDailyReportFromDb(reportDate);
   if(options.requireData && (!snapshots.length || !topics.length)) throw new Error('该统计窗口没有有效快照或话题，已有日报保持不变。');
   if(snapshots.length&&!topics.length)throw new Error('该窗口缺少符合综合日报规则的话题，已有日报保持不变。');
   log('info', `Top10 汇总完成：${topics.length} 个话题`);
@@ -130,16 +130,11 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
     }
   }
   if(top) log(top.aiAnalysis && top.aiAnalysis.model!=='local-rules'?'info':'warn', `TOP1 分析来源：${top.aiAnalysis?.model ?? '无分析'}${top.aiAnalysis?.model==='local-rules'?'（本地规则回退）':''}`);
+  reuseDailyComments({reportDate,windowStart:getChinaSnapshotId(start),windowEnd:getChinaSnapshotId(end),topics},previous);
   // Historical regeneration reuses frozen evidence rather than collecting today's comments.
   if(Date.now()-end.getTime()<36*3600_000){
-    for(const topic of topics.slice(0,3)){
-      const original=snapshots.find(s=>s.date===topic.analysisSnapshotDate)?.topics.find(t=>t.id===topic.analysisTopicId);
-      if(!original)continue;
-      const analysis=topic.aiAnalysis??buildFallbackTopicAnalysis(original);
-      const enriched=await enrichTopicComments(original,analysis);
-      if(enriched.commentExamples||analysis.commentExamples){topic.aiAnalysis=enriched;log('info',`#${topic.rank} 评论样本：${enriched.commentExamples?.sampleCount??0} 条`);}
-    }
-  }
+    await enrichDailyComments(topics,log);
+  }else log('info','历史日报沿用已保存评论证据，不重新抓取当前评论。');
   log('info', '正在生成中文日报稿件');
   const drafts = await generateDrafts(reportDate, snapshots, topics, {
     start: getChinaSnapshotId(start), end: getChinaSnapshotId(end),complete:collection.complete,observedUntil:collection.observedUntil
@@ -155,7 +150,6 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
     ...drafts
   };
 
-  const previous=readDailyReportFromDb(reportDate);
   saveDailyReportToDb(report, generation);
   log('info', `中文日报已保存，稿件模型：${report.model}`);
   log('info', '正在生成英文分享翻译');

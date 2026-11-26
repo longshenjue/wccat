@@ -26,11 +26,11 @@ test('compact battle strips preserve the matching source scores and do not reuse
  assert.equal(validateShareEn(copy,report).highlights[0].battle,undefined,'malformed optional stance must not block an otherwise valid article');
  delete copy.highlights[0].battle;assert.ok(validateShareEn(copy,report),'legacy cache remains valid without a battle');
 });
-test('compact attitude text cannot grow into a long report and invalid estimates do not become a fake balance',()=>{
+test('English attitude text stays complete and invalid estimates do not become a fake balance',()=>{
  const report=fixture('2026-11-15');report.topics[0].aiAnalysis=undefined;
  const long=normaliseShareEnBattle({...english,redLabel:'A very long opinion label with too many words',redRationale:'A long explanation which continues for many words and must stay compact on the card.'},report,report.topics[0].id)!;
- assert.ok(long.redLabel.length<=30);assert.ok(long.redLabel.split(/\s+/).length<=3);
- assert.ok(long.redRationale.length<=72);assert.ok(long.redRationale.split(/\s+/).length<=8);
+ assert.equal(long.redLabel,'A very long opinion label with too many words');
+ assert.equal(long.redRationale,'A long explanation which continues for many words and must stay compact on the card.');
  for(const values of [{redScore:0,blueScore:0},{redScore:NaN,blueScore:30},{redScore:-10,blueScore:110}])assert.equal(normaliseShareEnBattle({...english,...values},report,report.topics[0].id),undefined);
  assert.equal(normaliseShareEnBattle({...english,redLabel:'中文'},report,report.topics[0].id),undefined);
 });

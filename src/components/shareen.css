@@ -3,6 +3,8 @@
 .shareen-card{box-sizing:border-box;width:1200px;height:1500px;padding:54px 64px 44px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:26px;color:#17365f;background:#fff;font-family:Arial,Helvetica,sans-serif;font-size:36px;line-height:1.33;text-align:left;letter-spacing:0;overflow:visible;color-scheme:light}
 .shareen-card *{box-sizing:border-box;max-height:none;overflow:visible;text-overflow:clip;-webkit-line-clamp:unset;line-clamp:unset;animation:none!important;transition:none!important}
 .shareen-card p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+/* Admin paragraphs must not add margins that disappear in the export portal. */
+.shareen-card .shareen-card-body p,.shareen-card .shareen-card-footer p{margin:0}
 .shareen-card-header,.shareen-overview-header{padding-bottom:22px;position:relative;border-bottom:0;min-width:0}
 .shareen-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:28px}
 .shareen-card .shareen-masthead{margin:14px 0 0;white-space:nowrap;font-size:44px;font-weight:700;line-height:1.16;letter-spacing:-1.5px;color:#17365f}

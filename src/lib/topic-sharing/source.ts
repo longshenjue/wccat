@@ -46,6 +46,11 @@ function finalize(value:Omit<TopicShareSource,'fingerprint'|'sourceKey'>):TopicS
  }
  return {...source,sourceKey:sourceHash(source.ref),fingerprint:sourceHash(source)};
 }
+/** Only trusted collectors may extend a frozen source; never modify the original report. */
+export function withTopicShareComments(source:TopicShareSource,analysis:TopicAnalysis):TopicShareSource {
+ const {fingerprint,sourceKey:_,...material}=source;
+ return finalize({...material,baseFingerprint:source.baseFingerprint??fingerprint,analysis,commentExamples:analysis.commentExamples});
+}
 export function loadTopicShareSource(value:unknown):TopicShareSource {
  const ref=parseTopicShareRef(value);
  try{

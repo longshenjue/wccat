@@ -3,14 +3,6 @@ import type {ShareEnBattle,ShareEnCopy} from './shareen-types';
 
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const english=(v:unknown):v is string=>typeof v==='string'&&!!v.trim()&&!/\p{Script=Han}/u.test(v)&&/[a-z]/i.test(v);
-/** Only this intentionally compact caption is abbreviated; article body text is never clipped. */
-function short(value:string,words:number,characters:number):string {
- const text=value.trim().replace(/\s+/g,' '),parts=text.split(' ');
- let result=parts.slice(0,words).join(' ');
- const shortened=parts.length>words||result.length>characters;
- if(shortened)result=result.slice(0,characters-1).trimEnd().replace(/[.,;:!?…]+$/u,'')+'…';
- return result;
-}
 function pair(value:unknown):{redScore:number;blueScore:number}|undefined {
  const b=object(value),r=b.redScore,v=b.blueScore;
  if(typeof r!=='number'||typeof v!=='number'||!Number.isFinite(r)||!Number.isFinite(v)||r<0||v<0||r>100||v>100||r+v<=0)return undefined;
@@ -30,7 +22,7 @@ export function normaliseShareEnBattle(value:unknown,report:WccatDailyReport,top
  if(![b.redLabel,b.blueLabel,b.redRationale,b.blueRationale].every(english))return undefined;
  const existing=pair(topic.aiAnalysis?.battle),scores=existing??pair(b);
  if(!scores)return undefined;
- return {redLabel:short(b.redLabel as string,3,30),blueLabel:short(b.blueLabel as string,3,30),redRationale:short(b.redRationale as string,8,72),blueRationale:short(b.blueRationale as string,8,72),...scores,basis:existing?'analysis':'estimate'};
+ return {redLabel:(b.redLabel as string).trim(),blueLabel:(b.blueLabel as string).trim(),redRationale:(b.redRationale as string).trim(),blueRationale:(b.blueRationale as string).trim(),...scores,basis:existing?'analysis':'estimate'};
 }
 
 /** Reuse English only when it belongs to this exact source topic. */

@@ -9,6 +9,7 @@ export type CommentExamples = {
   sampleCount:number; sampledAt:string; runIds:string[];
 };
 export type CommentSample = {comments:SampledComment[];runIds:string[]};
+export type CommentLog=(level:'info'|'warn'|'error',message:string)=>void;
 export type CommentSource = 'bilibili'|'zhihu'|'weibo'|'hupu'|'douban'|'tieba'|'thepaper'|'qq-news'|'sina-news'|'netease-news'|'ithome'|'huxiu'|'toutiao';
 export type CommentRequest = {url:string;method?:'POST';body?:string;contentType?:string;articleUrl?:string};
 export type CommentThread = {

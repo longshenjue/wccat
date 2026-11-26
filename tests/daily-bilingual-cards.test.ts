@@ -8,6 +8,7 @@ import {ShareEnPoster,shareEnCanvasHeight} from '../src/components/shareen-poste
 import {shareEnTextFiles} from '../src/lib/share-export';
 import {createStoreZip} from '../src/lib/client-zip';
 import type {CommentExamples} from '../src/lib/comments/types';
+import {buildChineseDailyCards,getDailyCardBattle} from '../src/lib/daily-bilingual-cards';
 
 async function setup(count=4){
  const report=fixture('2026-11-24');
@@ -17,6 +18,25 @@ async function setup(count=4){
  return {report,copy};
 }
 const examples:CommentExamples={redLabel:'质疑',blueLabel:'支持',sampleCount:20,sampledAt:'2026-11-24T01:00:00Z',runIds:['run'],red:{id:'zhihu:1',sourceId:'zhihu',sourceName:'知乎',articleUrl:'https://www.zhihu.com/question/123',url:'https://www.zhihu.com/question/123',text:'希望先看完整证据再下判断。',likes:12,rank:1,observedAt:'2026-11-24T01:00:00Z'}};
+
+test('native daily cards preserve complete saved paragraphs and attitude labels instead of character excerpts',async()=>{
+ const {report,copy}=await setup();const topic=report.topics[0];
+ topic.title='东北的洗浴已经这么卷了吗：从暴风雨体验到综合休闲服务的新变化';
+ topic.aiAnalysis!.detailedContent='近日辽宁沈阳一家洗浴中心推出暴风雨SPA，模拟淋雨体验，有网友称弥补了冬天没法淋雨的遗憾。这一新奇项目让东北洗浴的内卷话题再次升温，百度、头条、微博、抖音均出现相关讨论。';
+ topic.aiAnalysis!.outsiderContext='东北洗浴文化是中文互联网的独特景观，豪华澡堂常被当作地域符号讨论。这次因暴风雨SPA出圈，反映中国服务业内卷式创新，也让不同地区的读者比较自己的休闲消费体验。';
+ const battle=topic.aiAnalysis!.battle;
+ battle.redLabel='东北洗浴服务丰富、性价比高，卷得让人羡慕';
+ battle.blueLabel='过度内卷可能带来资源浪费和体验同质化';
+ battle.redRationale='暴风雨SPA等新奇项目强化了豪华低价印象，网友以羡慕调侃为主，正面讨论集中在服务内容和实际体验。';
+ battle.blueRationale='少数声音担忧内卷加剧行业压力，但缺乏具体争议样本，不能把这些个别声音当作整体态度。';
+ const native=buildChineseDailyCards(report,copy),detail=native.highlights[0];
+ assert.equal(detail.hook,topic.title);assert.equal(detail.whatHappened,topic.aiAnalysis!.detailedContent);assert.equal(detail.whyItMatters,topic.aiAnalysis!.outsiderContext);
+ assert.equal(native.overview.topics[0].title,topic.title);
+ for(const field of ['redLabel','blueLabel','redRationale','blueRationale'] as const)assert.equal(getDailyCardBattle(report,copy,1,'zh')![field],battle[field]);
+ const html=renderToStaticMarkup(createElement(ShareEnPoster,{report,copy,index:1,language:'zh'}));
+ for(const text of [topic.title,topic.aiAnalysis!.detailedContent,topic.aiAnalysis!.outsiderContext,battle.redLabel,battle.blueLabel,battle.redRationale,battle.blueRationale])assert.ok(html.includes(text),`missing complete source text: ${text}`);
+ assert.doesNotMatch(html,/原文摘选|…/);
+});
 
 test('Chinese edition uses every native ranked title and the exact English-selected stories',async()=>{
  const {report,copy}=await setup(10);

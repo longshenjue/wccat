@@ -9,14 +9,14 @@ import {resolveNewsRequest} from './news';
 import {resolveTechRequest,fallbackTechRequest} from './tech';
 import {resolveToutiaoRequest} from './toutiao';
 import {firstFeedItemEnvelope} from './first-feed-item';
-import type {CommentRequest,CommentSample,CommentThread,SampledComment} from './types';
+import type {CommentRequest,CommentSample,CommentThread,SampledComment,CommentLog} from './types';
 
 export const COMMENT_TTL=4*3600_000;
-type Dependencies={fetch?:typeof fetch;now?:()=>number;sleep?:(ms:number)=>Promise<void>;dailyLimit?:number};
+type Dependencies={fetch?:typeof fetch;now?:()=>number;sleep?:(ms:number)=>Promise<void>;dailyLimit?:number;log?:CommentLog};
 /** Hard bounds apply even if an upstream ignores its limit or pagination parameters. */
 export class CommentCollector {
   private state:ProviderState;private request:typeof fetch;private now:()=>number;private sleep:(ms:number)=>Promise<void>;private dailyLimit:number;
-  constructor(private db:Database.Database,options:Dependencies={}){
+  constructor(private db:Database.Database,private options:Dependencies={}){
     this.state=new ProviderState(db);this.request=options.fetch??fetch;this.now=options.now??Date.now;this.sleep=options.sleep??(ms=>new Promise(resolve=>setTimeout(resolve,ms)));
     this.dailyLimit=Math.min(100,Math.max(1,Math.floor(options.dailyLimit??100)));
   }
@@ -57,12 +57,13 @@ export class CommentCollector {
   async collect(occurrences:Array<{sourceId:string;url:string}>):Promise<CommentSample>{
     const generation=readGeneration(this.db),comments:SampledComment[]=[],runIds:string[]=[],threads=new Map<string,CommentThread>();
     for(const item of occurrences.slice(0,30)){const thread=resolveCommentThread(item);if(thread&&!threads.has(thread.key))threads.set(thread.key,thread);if(threads.size===2)break;}
+    if(!threads.size)this.options.log?.('info','未找到可识别的评论原帖入口（搜索页或热点 ID 不等于原帖 ID）；未请求评论接口。');
     for(const thread of threads.values()){
       const {result,owner}=await this.reserve('comments-sample-v1',thread.key,12,generation);
       if(result.kind==='cached'){
-        const cached=result.payload as {comments:SampledComment[];runId:string};comments.push(...cached.comments.slice(0,20));runIds.push(cached.runId);continue;
+        const cached=result.payload as {comments:SampledComment[];runId:string};comments.push(...cached.comments.slice(0,20));runIds.push(cached.runId);this.options.log?.('info',`${thread.sourceName}：复用缓存 ${cached.comments.slice(0,20).length} 条。`);continue;
       }
-      if(result.kind!=='reserved')continue;
+      if(result.kind!=='reserved'){this.options.log?.('warn',`${thread.sourceName}：本轮未请求，${result.kind==='blocked'?result.reason:'其他任务正在采集'}。`);continue;}
       try{
         let request:CommentRequest|undefined=thread.apiUrl?{url:thread.apiUrl}:undefined;
         if(thread.bvid){
@@ -83,11 +84,13 @@ export class CommentCollector {
         const run=guardedWrite(this.db,()=>new EvidenceStore(this.db).recordBatch({source:{provider:'public-comments',platform:thread.sourceId,adapter:'bounded-comments-v2',capability:'comments'},status:items.length?'success':'empty',observedAt,request:{articleUrl:thread.articleUrl,commentArticleUrl:commentThread.articleUrl,apiUrl:request!.url,method:request!.method??'GET',limit:20,pages:1,nested:false,fallback:!!fallback},response:{comments:items},items:[]}),generation);
         this.state.complete('comments-sample-v1',thread.key,owner,this.now(),{comments:items,runId:run.runId},this.now()+COMMENT_TTL,generation);
         comments.push(...items);runIds.push(run.runId);
+        this.options.log?.('info',`${thread.sourceName}：已请求，保存 ${items.length} 条评论${items.length?'':'（接口返回空列表或无可用正文）'}。`);
       }catch(error){
         if(error instanceof MaintenanceError)throw error;
         const status=error&&typeof error==='object'&&'status' in error?Number(error.status):0;
         const cooldown=[401,403,412,429].includes(status)?6*3600_000:30*60_000;
         this.state.fail('comments-sample-v1',thread.key,owner,this.now()+cooldown,error instanceof CommentResponseError?error.message:'Comment collection unavailable',generation);
+        this.options.log?.('warn',`${thread.sourceName}：抓取失败${status?`（HTTP/接口状态 ${status}）`:''}，本轮没有新增评论，已进入冷却。`);
       }
     }
     guardedWrite(this.db,()=>{

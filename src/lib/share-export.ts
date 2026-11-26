@@ -8,13 +8,24 @@ import {shareEnCommentSource} from './comments/sharing';
 import {visibleCommentQuotes,excerptComment} from './comments/selection';
 import {shareEnOverviewAltText} from './shareen-overview';
 
-/** Measure at export size. All text remains visible, including when it cannot fit. */
+/** Use the available canvas, then compact and grow vertically without cutting source text. */
 export function fitShareEnCard(card: HTMLElement, identity: string): boolean {
  const overflows = () => [...card.querySelectorAll<HTMLElement>('[data-fit-zone]')]
   .some(zone => zone.scrollHeight > zone.clientHeight + 1 || zone.scrollWidth > zone.clientWidth + 1);
  card.classList.remove('shareen-compact');
+ if(card.style&&card.dataset?.shareenHeight){card.style.height=card.dataset.shareenHeight+'px';card.style.gridTemplateRows='';}
  if (!overflows()) return false;
  card.classList.add('shareen-compact');
+ if(overflows()&&typeof getComputedStyle==='function'&&typeof card.querySelector==='function'){
+  const header=card.querySelector<HTMLElement>('.shareen-card-header,.shareen-overview-header'),body=card.querySelector<HTMLElement>('.shareen-card-body'),footer=card.querySelector<HTMLElement>('.shareen-card-footer');
+  if(header&&body&&footer){
+   const style=getComputedStyle(card),number=(value:string)=>Number.parseFloat(value)||0;
+   const headerHeight=Math.max(header.clientHeight,header.scrollHeight),footerHeight=Math.max(footer.clientHeight,footer.scrollHeight);
+   const height=number(style.paddingTop)+number(style.paddingBottom)+2*number(style.rowGap)+headerHeight+footerHeight+body.scrollHeight+8;
+   card.style.gridTemplateRows=`${headerHeight}px minmax(0,1fr) ${footerHeight}px`;
+   card.style.height=Math.ceil(Math.max(card.offsetHeight,height))+'px';
+  }
+ }
  if (overflows()) throw new Error(`卡片 ${identity} 超出 1200 × ${card.offsetHeight||1500} 安全区，请缩短该卡文案后重试。`);
  return true;
 }
