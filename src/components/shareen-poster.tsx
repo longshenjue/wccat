@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { WccatDailyReport } from '@/lib/daily-report';
 import type { ShareEnBattle, ShareEnCopy } from '@/lib/shareen-types';
+import type {PublicationReference} from '@/lib/publications/types';
 import { fitShareEnCard } from '@/lib/share-export';
 import { shareEnImage, type ShareEnImage } from '@/lib/shareen-media';
 import { validateImageAsset, WIDE_IMAGE, SPLIT_IMAGE } from '@/lib/shareen-image-types';
@@ -52,7 +53,7 @@ function DebateStrip({battle,editorial=false,language}:{battle:ShareEnBattle;edi
 }
 
 /** Preview and export share a stacked brand/title/date header and safe cached image layouts. */
-export function ShareEnPoster({report,copy:englishCopy,index,language='en'}:{report:WccatDailyReport;copy:ShareEnCopy;index:number;language?:ShareLanguage}) {
+export function ShareEnPoster({report,copy:englishCopy,index,language='en',publication}:{report:WccatDailyReport;copy:ShareEnCopy;index:number;language?:ShareLanguage;publication?:PublicationReference}) {
  const copy=language==='zh'?buildChineseDailyCards(report,englishCopy):englishCopy;
  const en=language==='en';
  const highlight = index > 0 ? copy.highlights[index-1] : undefined;
@@ -87,7 +88,7 @@ export function ShareEnPoster({report,copy:englishCopy,index,language='en'}:{rep
     })}</ol>
    </>}
   </div>
-  <footer className="shareen-card-footer" data-fit-zone><div><Brand footer language={language}/><p>{en?(topic?'Source image and links: see en-sources.txt':'Highlighted stories have a closer-look card'):(topic?'配图与来源链接：见 zh-sources.txt':'标记条目附热点详情卡')}</p><p>{report.windowStart} → {report.windowEnd} UTC+8</p></div><b>{String(index+1).padStart(2,'0')}<small> / {String(copy.highlights.length+1).padStart(2,'0')}</small></b></footer>
+  <footer className="shareen-card-footer" data-fit-zone><div><Brand footer language={language}/><p>{publication?(en?`Sources: profile link · #${publication.reference}`:`来源与原文：主页链接 · #${publication.reference}`):(en?'Sources & context: WcCAT profile link.':'来源与背景：WcCAT 主页链接。')}</p><p>{report.windowStart} → {report.windowEnd} UTC+8</p></div><b>{String(index+1).padStart(2,'0')}<small> / {String(copy.highlights.length+1).padStart(2,'0')}</small></b></footer>
  </article>;
 }
 
@@ -112,7 +113,7 @@ export function ScaledPoster({width,height,children}:{width:number;height?:numbe
  return <div className="shareen-scaled-host" ref={host} style={{height:size.height*size.scale}}><div className="shareen-scaled-inner" ref={inner} style={{width,transform:`scale(${size.scale})`}}>{children}</div></div>;
 }
 
-export function ShareEnPreviewCard({report,copy,index,onDownload,disabled,onReprocess,processingDisabled=false,language='en'}:{report:WccatDailyReport;copy:ShareEnCopy;index:number;onDownload:()=>void;disabled:boolean;onReprocess?:()=>void;processingDisabled?:boolean;language?:ShareLanguage}) {
+export function ShareEnPreviewCard({report,copy,index,onDownload,disabled,onReprocess,processingDisabled=false,language='en',publication}:{report:WccatDailyReport;copy:ShareEnCopy;index:number;onDownload:()=>void;disabled:boolean;onReprocess?:()=>void;processingDisabled?:boolean;language?:ShareLanguage;publication?:PublicationReference}) {
  const root=useRef<HTMLDivElement>(null);
  const [error,setError]=useState('');
  const [failedImage,setFailedImage]=useState('');
@@ -135,6 +136,6 @@ export function ShareEnPreviewCard({report,copy,index,onDownload,disabled,onRepr
   host?.addEventListener('load',afterImage,true);
   host?.addEventListener('error',afterImage,true);
   return ()=>{active=false;host?.removeEventListener('load',afterImage,true);host?.removeEventListener('error',afterImage,true);};
- },[report,copy,index,identity,imageSrc]);
- return <section className="shareen-preview-card"><div className="shareen-preview-heading"><h4>{identity}</h4><div className="shareen-preview-actions">{index>0&&onReprocess?<button type="button" disabled={disabled||processingDisabled} onClick={onReprocess}>重新处理配图</button>:null}<button type="button" disabled={disabled||Boolean(error)} onClick={onDownload}>↓ PNG</button></div></div><div ref={root}><ScaledPoster width={1200}><ShareEnPoster report={report} copy={copy} index={index} language={language}/></ScaledPoster></div>{index>0&&imageSrc&&failedImage!==imageSrc?<p className="data-muted" role="status">{image?.processed?`配图已就绪 · ${image.layout==='split'?'分栏 400 × 480（完整原图）':'通栏 1072 × 360'}${asset?.reason?` · ${asset.reason}`:''}`:'原图预览 · 待处理，当前完整显示原图'}</p>:null}{index>0&&(!imageSrc||failedImage===imageSrc)?<p className="data-muted">配图已隐藏或不可用，已自动收起图片区。</p>:null}{index>0&&!getDailyCardBattle(report,copy,index,language)?<p className="data-muted">{language==='zh'?'该话题没有可用的已保存中文情绪分析，已省略情绪条。':'情绪条尚未就绪，请查看生成日志。重新生成 ShareEn 会尝试补齐；“补齐配图”只处理照片。'}</p>:null}{error?<p className="data-error" role="alert">{error}</p>:null}</section>;
+ },[report,copy,index,identity,imageSrc,publication]);
+ return <section className="shareen-preview-card"><div className="shareen-preview-heading"><h4>{identity}</h4><div className="shareen-preview-actions">{index>0&&onReprocess?<button type="button" disabled={disabled||processingDisabled} onClick={onReprocess}>重新处理配图</button>:null}<button type="button" disabled={disabled||Boolean(error)} onClick={onDownload}>↓ PNG</button></div></div><div ref={root}><ScaledPoster width={1200}><ShareEnPoster report={report} copy={copy} index={index} language={language} publication={publication}/></ScaledPoster></div>{index>0&&imageSrc&&failedImage!==imageSrc?<p className="data-muted" role="status">{image?.processed?`配图已就绪 · ${image.layout==='split'?'分栏 400 × 480（完整原图）':'通栏 1072 × 360'}${asset?.reason?` · ${asset.reason}`:''}`:'原图预览 · 待处理，当前完整显示原图'}</p>:null}{index>0&&(!imageSrc||failedImage===imageSrc)?<p className="data-muted">配图已隐藏或不可用，已自动收起图片区。</p>:null}{index>0&&!getDailyCardBattle(report,copy,index,language)?<p className="data-muted">{language==='zh'?'该话题没有可用的已保存中文情绪分析，已省略情绪条。':'情绪条尚未就绪，请查看生成日志。重新生成 ShareEn 会尝试补齐；“补齐配图”只处理照片。'}</p>:null}{error?<p className="data-error" role="alert">{error}</p>:null}</section>;
 }

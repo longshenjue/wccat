@@ -11,6 +11,7 @@ import {createEvidenceSchema} from './evidence-schema';
 import {recordSnapshotEvidence,recordLegacyAnalysis,recordAnalysisTrace} from './evidence-legacy';
 import {sanitizeEvidence} from './evidence-content';
 import {ensureProviderSchema} from './provider-state';
+import {ensurePublicationSchema} from './publications/schema';
 
 
 let db: Database.Database | undefined;
@@ -27,6 +28,7 @@ export function getDb() {
     ensureMaintenanceSchema(db);
     createEvidenceSchema(db);
     ensureProviderSchema(db);
+    ensurePublicationSchema(db);
   }
 
   return db;

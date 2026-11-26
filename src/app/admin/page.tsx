@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AdminDataPanel } from "@/components/admin-data-panel";
 import { adminConfigured } from "@/lib/admin-auth";
 import "@/components/admin-data.css";
+import "@/components/publications/publication-controls.css";
 
 export const dynamic = "force-dynamic";
 

@@ -1,13 +1,16 @@
 import type {ZipEntry} from '../client-zip';
 import type {TopicShareLanguage,TopicShareRecord} from './types';
 import {usableTopicQuotes} from './recommendation';
+import type {PublicationReference} from '../publications/types';
+import {publicationTextFiles} from '../publications/materials';
+export type TopicPublicationExport={reference:PublicationReference;origin:string};
 
 /** Only frozen, validated HTTP(S) citations enter a download. */
 export function topicSourceHref(value:string):string|undefined {
  try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:undefined;}catch{return undefined;}
 }
 
-export function topicShareTextFiles(record:TopicShareRecord):ZipEntry[] {
+export function topicShareTextFiles(record:TopicShareRecord,publication?:TopicPublicationExport):ZipEntry[] {
  if(record.copy.sourceFingerprint!==record.source.fingerprint)throw new Error('分享来源版本不一致，请重新载入已保存稿。');
  const files:Array<{name:string;text:string}>=[];
  for(const language of ['en','zh'] as const){
@@ -30,11 +33,11 @@ export function topicShareTextFiles(record:TopicShareRecord):ZipEntry[] {
   `Column: ${record.copy.column}`,`Saved revision: ${record.revision}`,`Generated copy: ${record.copy.generatedAt}`,`Model: ${record.copy.model}`,'',
   ...(['en','zh'] as const).flatMap(language=>[`${language.toUpperCase()} caption candidates:`,...record.copy[language].posts.flatMap(post=>[`${post.id===record.copy[language].selectedPostId?'[selected] ':''}${post.id} · ${post.pattern}`,post.reason,post.text,''])])
  ].join('\n')});
- return ordered.map(({name,text})=>({name,data:new TextEncoder().encode(text+'\n')}));
+ return [...ordered.map(({name,text})=>({name,data:new TextEncoder().encode(text+'\n')})),...(publication?publicationTextFiles(publication.reference,publication.origin,{en:usableTopicQuotes(record.source,'en').length>0,zh:quotes.length>0}):[])];
 }
 
-export async function createTopicShareZip(record:TopicShareRecord,pngs:Record<TopicShareLanguage,Uint8Array>):Promise<Uint8Array<ArrayBuffer>> {
- const texts=topicShareTextFiles(record);
+export async function createTopicShareZip(record:TopicShareRecord,pngs:Record<TopicShareLanguage,Uint8Array>,publication?:TopicPublicationExport):Promise<Uint8Array<ArrayBuffer>> {
+ const texts=topicShareTextFiles(record,publication);
  for(const language of ['en','zh'] as const)if(!pngs[language]?.byteLength)throw new Error(`${language==='en'?'EN':'中文 zh'} PNG 尚未生成，不能导出不完整 ZIP。`);
  const {createStoreZip}=await import('../client-zip');
  return createStoreZip([{name:'en.png',data:pngs.en},{name:'zh.png',data:pngs.zh},...texts]);

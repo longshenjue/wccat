@@ -7,6 +7,8 @@ import type {ShareLanguage} from './daily-share-copy';
 import {shareEnCommentSource} from './comments/sharing';
 import {visibleCommentQuotes,excerptComment} from './comments/selection';
 import {shareEnOverviewAltText} from './shareen-overview';
+import type {PublicationReference} from './publications/types';
+import {publicationTextFiles} from './publications/materials';
 
 /** Use the available canvas, then compact and grow vertically without cutting source text. */
 export function fitShareEnCard(card: HTMLElement, identity: string): boolean {
@@ -87,8 +89,10 @@ export function dailyCardFilename(index:number,language:ShareLanguage):string {
  return `${language}-${String(index+1).padStart(2,'0')}-${index===0?'overview':'deep-dive'}.png`;
 }
 
-export function bilingualDailyTextFiles(report:WccatDailyReport,copy:ShareEnCopy):ZipEntry[] {
- return (['en','zh'] as const).flatMap(language=>shareEnTextFiles(report,copy,language).map(file=>({...file,name:`${language}-${file.name}`})));
+export function bilingualDailyTextFiles(report:WccatDailyReport,copy:ShareEnCopy,publication?:{reference:PublicationReference;origin:string}):ZipEntry[] {
+ const files=(['en','zh'] as const).flatMap(language=>shareEnTextFiles(report,copy,language).map(file=>({...file,name:`${language}-${file.name}`})));
+ const hasComments=(language:'en'|'zh')=>copy.highlights.some((_,index)=>{const source=shareEnCommentSource(report,copy,index+1,language);return source&&visibleCommentQuotes(source.examples,source.battle,language).length>0;});
+ return [...files,...(publication?publicationTextFiles(publication.reference,publication.origin,{en:hasComments('en'),zh:hasComments('zh')}):[])];
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {
