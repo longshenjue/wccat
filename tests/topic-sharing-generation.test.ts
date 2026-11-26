@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateTopicShare} from '../src/lib/topic-sharing/generation';
 import type {TopicShareSource} from '../src/lib/topic-sharing/types';
-import {spaceContent,spaceSource} from './helpers/topic-sharing-space-fixture';
-import {bathhouseContent,bathhouseSource} from './helpers/topic-sharing-bathhouse-fixture';
 
 function source():TopicShareSource {
  return {ref:{kind:'daily',date:'2026-11-24',topicId:'battery'},sourceKey:'daily:battery',fingerprint:'a'.repeat(64),date:'2026-11-24',observedAt:'2026-11-24T01:00:00.000Z',topicId:'battery',title:'汽车厂商公布电池升级计划',summary:'厂商公布电池升级计划，具体安排仍待说明。',detail:'相关报道描述了电池升级安排，目前材料没有提供价格与发布时间。',context:'从已保存报道了解厂商计划，不能把计划当成已经落地的产品。',categories:['科技','汽车'],rank:1,signal:'相关报道进入榜单',links:[{sourceId:'zhihu',sourceName:'知乎',title:'电池升级计划',url:'https://www.zhihu.com/question/123'}]};
@@ -54,7 +52,7 @@ test('DeepSeek generation is bounded, source-grounded and returns server-owned m
    assert.equal(result.sourceFingerprint,value.fingerprint);
    assert.ok(!JSON.stringify(result).includes('attacker.example'));
   });
-  await t.test('each selected column receives a distinct brief and voices needs genuine bilingual evidence',async()=>{
+  await t.test('each selected column receives a distinct brief without a translation-evidence gate',async()=>{
    const value=source();value.analysis={summary:value.summary,detailedContent:value.detail,outsiderContext:value.context,model:'saved',platformAnalyses:[],battle:{redLabel:'期待说明',blueLabel:'等待验证',redScore:40,blueScore:60,redRationale:'等待细节',blueRationale:'等待验证'}};
    value.commentExamples={redLabel:'期待说明',blueLabel:'等待验证',sampleCount:1,sampledAt:value.observedAt,runIds:['saved'],red:{id:'zhihu:77',sourceId:'zhihu',sourceName:'知乎',articleUrl:value.links[0].url,url:value.links[0].url,rank:1,observedAt:value.observedAt,text:'请先说清楚具体升级安排。',englishText:'Please explain the upgrade plan first.'}};
    const briefs:string[]=[];
@@ -69,7 +67,7 @@ test('DeepSeek generation is bounded, source-grounded and returns server-owned m
     assert.equal(generated.column,column);
    }
    assert.equal(new Set(briefs).size,3);
-   let calls=0;await assert.rejects(generateTopicShare(source(),{column:'voices',fetch:async()=>{calls++;return response(content());}}),/column|comment/i);assert.equal(calls,0);
+   let calls=0;const editable=await generateTopicShare(source(),{column:'voices',fetch:async()=>{calls++;return response({...content(),column:'voices'});}});assert.equal(editable.column,'voices');assert.equal(calls,1);
   });
   await t.test('response failures do not retry, silently fall back, or expose API credentials',async()=>{
    for(const makeResponse of [
@@ -78,8 +76,7 @@ test('DeepSeek generation is bounded, source-grounded and returns server-owned m
     ()=>Response.json({choices:[{message:{content:'not JSON'}}]}),
     ()=>Response.json({choices:[{message:{content:''}}]}),
     ()=>response({...content(),links:source().links}),
-    ()=>response({...content(),generatedAt:'1900-01-01T00:00:00.000Z'}),
-    ()=>response({...content(),column:'inside'})
+    ()=>response({...content(),generatedAt:'1900-01-01T00:00:00.000Z'})
    ]){
     let calls=0;const logs:string[]=[];
     await assert.rejects(generateTopicShare(source(),{fetch:async()=>{calls++;return makeResponse();},log:(_level,message)=>logs.push(message)}));
@@ -91,127 +88,13 @@ test('DeepSeek generation is bounded, source-grounded and returns server-owned m
    await assert.rejects(generateTopicShare(value,{fetch:async()=>{calls++;throw new DOMException('request timed out','TimeoutError');}}),/timeout|timed out/i);
    assert.equal(calls,1);assert.deepEqual(value,before);
   });
-  await t.test('duplicate JSON properties are quarantined instead of choosing a model override',async()=>{
+  await t.test('ambiguous translated JSON fields remain an editable blank rather than choosing a model override',async()=>{
    const serialized=JSON.stringify(content());
-   await assert.rejects(generateTopicShare(source(),{fetch:async()=>Response.json({choices:[{message:{content:serialized.replace('"headline":','"headline":"first","headline":')}}]})}),/headline|text|JSON/i);
+   const copy=await generateTopicShare(source(),{fetch:async()=>Response.json({choices:[{message:{content:serialized.replace('"headline":','"headline":"first","headline":')}}]})});
+   assert.equal(copy.en.headline,'');
   });
  }finally{
   if(previousKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previousKey;
   if(previousModel===undefined)delete process.env.DEEPSEEK_MODEL;else process.env.DEEPSEEK_MODEL=previousModel;
  }
-});
-
-test('a numeric-only rejection repairs only the failing text once and validates against the same frozen source',async()=>{
- const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
- try{
-  const value=spaceSource(),before=structuredClone(value),initial=spaceContent();
-  initial.en.hook='One astronaut, a Chinese poem and a cultural connection.';
-  const logs:string[]=[];let calls=0;
-  const generated=await generateTopicShare(value,{log:(_level,message)=>logs.push(message),fetch:async(_url,options)=>{
-   calls++;if(calls===1)return response(initial);
-   const request=JSON.parse(String(options?.body)),repair=JSON.parse(request.messages.at(-1).content);
-   assert.equal(repair.task,'repair_numerical_fields');
-   assert.equal(repair.source.title,value.title);assert.equal(repair.draft.en.hook,initial.en.hook);
-   assert.deepEqual(repair.issues.map((issue:{path:string})=>issue.path),['en.hook']);
-   assert.ok(request.max_tokens<=3000);
-   return response({patches:[{path:'en.hook',text:'A Pakistani astronaut, a Chinese poem and a cultural connection.'}]});
-  }});
-  assert.equal(calls,2);assert.deepEqual(value,before);
-  assert.equal(generated.en.hook,'A Pakistani astronaut, a Chinese poem and a cultural connection.');
-  assert.deepEqual({...generated.en,hook:initial.en.hook},initial.en);assert.deepEqual(generated.zh,initial.zh);
-  assert.ok(logs.some(message=>message.includes('en.hook')));assert.ok(!logs.join('').includes('topic-test-secret'));
- }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
-});
-
-test('an unsuccessful numeric repair never triggers a third call or returns unsupported facts',async()=>{
- const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
- try{
-  for(const repaired of [
-   {patches:[{path:'en.summary',text:'The product reaches three million users.'}]},
-   {patches:[{path:'zh.summary',text:'厂商已完成升级。'}]},
-   {patches:[{path:'en.summary',text:'An announced plan.'},{path:'en.summary',text:'A plan.'}]},
-   {patches:[],links:[]}
-  ]){
-   const initial=content();initial.en.summary='The product reaches two million users.';
-   let calls=0;
-   await assert.rejects(generateTopicShare(source(),{fetch:async()=>response(++calls===1?initial:repaired)}));
-   assert.equal(calls,2);
-  }
- }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
-});
-
-test('a single numerical repair batches nested English post and Chinese reply fields without changing other copy',async()=>{
- const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
- try{
-  const original=content(),initial=structuredClone(original);let calls=0;
-  initial.en.posts[1].text='The plan reaches 999 people.';initial.zh.replies[0]='升级价格为999元。';
-  const generated=await generateTopicShare(source(),{fetch:async(_url,options)=>{
-   if(++calls===1)return response(initial);
-   const request=JSON.parse(String(options?.body)),repair=JSON.parse(request.messages.at(-1).content);
-   assert.deepEqual(repair.issues.map((issue:{path:string})=>issue.path),['en.posts[1].text','zh.replies[0]']);
-   return response({patches:[{path:'zh.replies[0]',text:original.zh.replies[0]},{path:'en.posts[1].text',text:original.en.posts[1].text}]});
-  }});
-  assert.equal(calls,2);assert.deepEqual(generated.en,original.en);assert.deepEqual(generated.zh,original.zh);
- }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
-});
-
-test('missing-comment claims receive one targeted repair against explicit evidence availability',async()=>{
- const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
- try{
-  const value=bathhouseSource();
-  const before=structuredClone(value),initial=bathhouseContent();initial.en.context='The comments show that viewers envy the facilities.';
-  const fixed='The saved material contains no viewer comments, so audience reactions remain unverified.';
-  let calls=0;
-  const generated=await generateTopicShare(value,{column:'inside',fetch:async(_url,options)=>{
-   const request=JSON.parse(String(options?.body)),payload=JSON.parse(request.messages.at(-1).content);
-   assert.deepEqual(payload.source.commentEvidenceAvailable,{en:false,zh:false});
-   if(++calls===1)return response(initial);
-   assert.equal(payload.task,'repair_evidence_fields');
-   assert.deepEqual(payload.issues.map((issue:{path:string})=>issue.path),['en.context']);
-   assert.ok(request.max_tokens<=3000);
-   return response({patches:[{path:'en.context',text:fixed}]});
-  }});
-  assert.equal(calls,2);assert.deepEqual(value,before);assert.deepEqual(generated.zh,initial.zh);
-  assert.deepEqual({...generated.en,context:initial.en.context},initial.en);assert.equal(generated.en.context,fixed);
- }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
-});
-
-test('comment and numeric failures share the same repair budget including when the same field fails both',async()=>{
- const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
- try{
-  const initial=content();initial.en.summary='The comments show support from 999 people.';initial.zh.replies[0]='网友表示升级安排很实惠。';
-  let calls=0;
-  const generated=await generateTopicShare(source(),{fetch:async(_url,options)=>{
-   if(++calls===1)return response(initial);
-   const payload=JSON.parse(JSON.parse(String(options?.body)).messages.at(-1).content);
-   assert.deepEqual([...new Set(payload.issues.map((issue:{path:string})=>issue.path))].sort(),['en.summary','zh.replies[0]']);
-   return response({patches:[{path:'en.summary',text:content().en.summary},{path:'zh.replies[0]',text:content().zh.replies[0]}]});
-  }});
-  assert.equal(calls,2);assert.deepEqual(generated.en,content().en);assert.deepEqual(generated.zh,content().zh);
- }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
-});
-
-test('a failed comment repair cannot start a third request or replace an unrelated field',async()=>{
- const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
- try{
-  for(const patch of [{path:'en.context',text:'The comments still show support.'},{path:'zh.context',text:'未知安排仍待确认。'},{path:'en.context',text:'The plan reaches 999 people.'}]){
-   const initial=content();initial.en.context='The comments show support.';let calls=0;
-   await assert.rejects(generateTopicShare(source(),{fetch:async()=>response(++calls===1?initial:{patches:[patch]})}));
-   assert.equal(calls,2);
-  }
- }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
-});
-
-test('unattributed quotation and comment failures share one repair without weakening the final evidence checks',async()=>{
- const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
- try{
-  const original=content(),initial=structuredClone(original);initial.en.context='The comments show support.';initial.en.summary='A commenter said “The plan is perfect.”';let calls=0;
-  const result=await generateTopicShare(source(),{fetch:async(_url,options)=>{
-   if(++calls===1)return response(initial);
-   const payload=JSON.parse(JSON.parse(String(options?.body)).messages.at(-1).content);
-   assert.deepEqual(new Set(payload.issues.map((issue:{path:string})=>issue.path)),new Set(['en.context','en.summary']));
-   return response({patches:[{path:'en.context',text:original.en.context},{path:'en.summary',text:original.en.summary}]});
-  }});
-  assert.equal(calls,2);assert.deepEqual(result.en,original.en);assert.deepEqual(result.zh,original.zh);
- }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
 });

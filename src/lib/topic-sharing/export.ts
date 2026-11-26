@@ -11,8 +11,8 @@ export function topicShareTextFiles(record:TopicShareRecord):ZipEntry[] {
  if(record.copy.sourceFingerprint!==record.source.fingerprint)throw new Error('分享来源版本不一致，请重新载入已保存稿。');
  const files:Array<{name:string;text:string}>=[];
  for(const language of ['en','zh'] as const){
-  const copy=record.copy[language],selected=copy.posts.find(post=>post.id===copy.selectedPostId);
-  if(!selected||!selected.text.trim())throw new Error(`${language==='en'?'EN':'中文 zh'} 配文候选无效，请先选择完整配文。`);
+  const copy=record.copy[language],selected=copy.posts.find(post=>post.id===copy.selectedPostId)??copy.posts[0];
+  if(!selected)throw new Error(`${language==='en'?'EN':'中文 zh'} 没有配文候选，请先添加配文。`);
   files.push({name:`post-${language}.txt`,text:selected.text},{name:`replies-${language}.txt`,text:copy.replies.join('\n\n')},{name:`alt-${language}.txt`,text:copy.altText});
  }
  // Group caption/reply/alt files by purpose so the bilingual pair stays together.
@@ -40,12 +40,22 @@ export async function createTopicShareZip(record:TopicShareRecord,pngs:Record<To
  return createStoreZip([{name:'en.png',data:pngs.en},{name:'zh.png',data:pngs.zh},...texts]);
 }
 
-/** No evidence is clipped: try a readable compact layout, then stop the download. */
+/** Preserve full draft text: compact if needed, then expand the canvas vertically. */
 export function fitTopicShareCard(card:HTMLElement,identity:string):boolean {
  const overflows=()=>[...card.querySelectorAll<HTMLElement>('[data-topic-fit]')].some(zone=>zone.scrollHeight>zone.clientHeight+1||zone.scrollWidth>zone.clientWidth+1);
  card.classList.remove('topic-share-compact');
+ if(card.style&&card.dataset?.topicBaseHeight){card.style.height=card.dataset.topicBaseHeight+'px';card.style.gridTemplateRows='';}
  if(!overflows())return false;
  card.classList.add('topic-share-compact');
+ if(overflows()&&typeof getComputedStyle==='function'&&typeof card.querySelector==='function'){
+  const header=card.querySelector<HTMLElement>('.topic-card-header'),content=card.querySelector<HTMLElement>('.topic-card-content'),footer=card.querySelector<HTMLElement>('.topic-card-footer');
+  if(header&&content&&footer){
+   const style=getComputedStyle(card),number=(value:string)=>Number.parseFloat(value)||0;
+   const headerHeight=Math.max(header.clientHeight,header.scrollHeight),footerHeight=Math.max(footer.clientHeight,footer.scrollHeight);
+   const height=number(style.paddingTop)+number(style.paddingBottom)+2*number(style.rowGap)+headerHeight+footerHeight+content.scrollHeight+8;
+   card.style.gridTemplateRows=`${headerHeight}px minmax(0,1fr) ${footerHeight}px`;card.style.height=Math.ceil(height)+'px';
+  }
+ }
  if(overflows())throw new Error(`卡片 ${identity} 超出 1080 × ${card.offsetHeight||1800} 安全区，请缩短文案后重试。`);
  return true;
 }

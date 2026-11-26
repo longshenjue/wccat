@@ -28,7 +28,8 @@ export type TopicShareCopy={
  version:1;generatedAt:string;model:string;sourceFingerprint:string;column:EditorialColumn;
  en:LocalizedTopicShare;zh:LocalizedTopicShare;
 };
-export type TopicShareRecord={id:string;revision:string;source:TopicShareSource;copy:TopicShareCopy};
+export type TopicShareReviewWarning={path:string;code:string;message:string;values?:string[]};
+export type TopicShareRecord={id:string;revision:string;source:TopicShareSource;copy:TopicShareCopy;reviewWarnings?:TopicShareReviewWarning[]};
 export type TopicShareCandidate={
  id:string;ref:TopicShareRef;title:string;date:string;rank:number;recommendation:TopicRecommendation;
 };

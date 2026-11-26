@@ -133,10 +133,10 @@ export function completeShareEnDraft(state:ShareEnDraftState,report:WccatDailyRe
  const highlights=(state.highlightIds as string[]).map(topicId=>{
   const battle=resolveShareEnBattle(report,topicId,state.topics[topicId].battle);
   const source=editorial?shareEnEditorialSource(report,topicId):undefined;
-  let column=source?recommendTopic(source).column:undefined;
+  let column=source?recommendTopic(source,{commentLanguage:'en'}).column:undefined;
   // The existing comment renderer needs a translated attitude analysis. Do not
   // label the card as voices if its saved quotes cannot actually be displayed.
-  if(column==='voices'&&!battle)column=eligibleColumns(source!).includes('tech')?'tech':'inside';
+  if(column==='voices'&&!battle)column=eligibleColumns(source!,{commentLanguage:'en'}).includes('tech')?'tech':'inside';
   return {...(battle?{battle}:{}),...(column?{column}:{}),topicId,hook:clean(state.topics[topicId].hook),whatHappened:clean(state.topics[topicId].whatHappened),context:'',whyItMatters:clean(state.topics[topicId].whyItMatters)};
  });
  const legacyTop3=Array.isArray(state.top3)?state.top3.map(object):[];

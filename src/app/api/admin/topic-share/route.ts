@@ -3,7 +3,8 @@ import {getChinaDate} from '@/lib/date';
 import {createJob} from '@/lib/admin-jobs';
 import {parseTopicShareRef,loadTopicShareSource,TopicSharingError,topicSharePayload,readTopicShare,saveTopicShareEdits} from '@/lib/topic-sharing/service';
 import {editorialShortlist} from '@/lib/topic-sharing/shortlist';
-import {recommendTopic,eligibleColumns} from '@/lib/topic-sharing/recommendation';
+import {recommendTopic} from '@/lib/topic-sharing/recommendation';
+import {EDITORIAL_COLUMNS} from '@/lib/topic-sharing/columns';
 import type {EditorialColumn,TopicShareCopy} from '@/lib/topic-sharing/types';
 
 export const dynamic='force-dynamic';
@@ -36,7 +37,7 @@ export async function POST(request:Request){
   if(body.action!=='generate')throw new AdminError('单话题操作无效。');
   if(body.force!==undefined&&typeof body.force!=='boolean')throw new AdminError('强制生成参数无效。');
   const ref=parseTopicShareRef(body.ref),source=loadTopicShareSource(ref);
-  if(body.column!==undefined&&!eligibleColumns(source).includes(body.column as EditorialColumn))throw new AdminError('该栏目不可用，需要可核实的评论与译文。');
+  if(body.column!==undefined&&!EDITORIAL_COLUMNS.some(item=>item.id===body.column))throw new AdminError('未知的分享栏目。');
   if(body.expectedSourceFingerprint!==source.fingerprint)throw new TopicSharingError('来源内容已更新，请重新载入后生成。',409);
   const current=readTopicShare(source.sourceKey),expected=current?.revision??'none';
   if(body.expectedRevision!==undefined&&body.expectedRevision!==expected)throw new TopicSharingError('分享版本已更新，请载入最新版本。',409);

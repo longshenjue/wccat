@@ -16,9 +16,9 @@ test('late topic-share generation cannot overwrite edits, source changes or a ma
   const beforeRepair=service.readTopicShare(first.id);let repairCalls=0;
   await assert.rejects(service.generateSavedTopicShare(ref,{force:true,expectedRevision:first.revision,fetch:async()=>{
    repairCalls++;
-   return Response.json({choices:[{message:{content:JSON.stringify(repairCalls===1?{column:'inside',en:{...copy.en,context:'The comments show support.'},zh:copy.zh}:{patches:[{path:'en.context',text:'Users strongly support the plan.'}]})}}]});
-  }}),/comment.*evidence/i);
-  assert.equal(repairCalls,2);assert.deepEqual(service.readTopicShare(first.id),beforeRepair,'a failed repair must preserve the exact saved draft and revision');
+   return new Response('provider unavailable',{status:503});
+  }}),/HTTP 503/i);
+  assert.equal(repairCalls,1);assert.deepEqual(service.readTopicShare(first.id),beforeRepair,'a failed provider request must preserve the exact saved draft and revision');
   const response=()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({column:'inside',en:copy.en,zh:copy.zh})}}]});
   await assert.rejects(service.generateSavedTopicShare(ref,{force:true,expectedRevision:first.revision,fetch:async()=>{
    service.saveTopicShareEdits(first.id,{...copy,en:{...copy.en,headline:'Newer manual edit'}},first.revision);return response();
@@ -33,14 +33,14 @@ test('late topic-share generation cannot overwrite edits, source changes or a ma
    maintenance.acquireMaintenance(ctx.getDb(),'topic-test');maintenance.advanceGeneration(ctx.getDb(),'topic-test');maintenance.releaseMaintenance(ctx.getDb(),'topic-test');return response();
   }}),/数据版本/);
   assert.equal(service.readTopicShare(first.id)!.revision,edited.revision);
-  // Candidate recomposition must pass through the same final optimistic write.
+  // Warning-only drafts must still pass through the same final optimistic write.
   let candidateCalls=0;
   await assert.rejects(service.generateSavedTopicShare(ref,{force:true,expectedRevision:edited.revision,fetch:async()=>{
-   if(++candidateCalls===1)return Response.json({choices:[{message:{content:JSON.stringify({column:'inside',en:{...copy.en,posts:copy.en.posts.map((post,i)=>i===2?{...post,text:'One scene explains this local story.'}:post)},zh:copy.zh})}}]});
+   candidateCalls++;
    service.saveTopicShareEdits(first.id,{...edited.copy,en:{...edited.copy.en,headline:'Latest manual save'}},edited.revision);
-   return Response.json({choices:[{message:{content:JSON.stringify({patches:[{path:'en.posts[2].text',text:'One scene explains this local story.'}]})}}]});
+   return Response.json({choices:[{message:{content:JSON.stringify({column:'inside',en:{...copy.en,posts:copy.en.posts.map((post,i)=>i===2?{...post,text:'One scene explains this local story.'}:post)},zh:copy.zh})}}]});
   }}),/版本|更新/);
-  assert.equal(candidateCalls,2);
+  assert.equal(candidateCalls,1);
   assert.equal(service.readTopicShare(first.id)!.copy.en.headline,'Latest manual save');
  }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;ctx.close();}
 });

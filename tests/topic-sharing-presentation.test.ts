@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createElement} from 'react';
+import React,{createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import type {TopicShareRecord} from '../src/lib/topic-sharing/types';
 
@@ -46,7 +46,7 @@ test('cards with no usable translation leave out quotations rather than inventin
  assert.doesNotMatch(markup,/comment-quotes|comment-quote-red|comment-quote-blue/);
  assert.match(markup,/Readers are asking for more evidence/);
  const zh=renderToStaticMarkup(createElement(TopicSharePoster,{record:missing,language:'zh'}));
- assert.doesNotMatch(zh,/comment-quotes/);
+ assert.match(zh,/请公布完整证据/);
  const mismatched=structuredClone(record);mismatched.source.analysis!.battle.redLabel='其他标签';
  assert.doesNotMatch(renderToStaticMarkup(createElement(TopicSharePoster,{record:mismatched,language:'en'})),/comment-quotes/);
 });
@@ -78,12 +78,12 @@ test('bilingual ZIP contains both PNGs and local text bytes with no source retri
  assert.equal(new TextDecoder().decode(files.get('post-en.txt')),'Edited selected English caption.\n');
 });
 
-test('export rejects stale evidence, missing caption selections and missing image output',async()=>{
+test('export rejects stale evidence and missing image output while retaining a fallback caption selection',async()=>{
  const {topicShareTextFiles,createTopicShareZip}=await exporting();
  const stale=structuredClone(record);stale.copy.sourceFingerprint='other-source';
  assert.throws(()=>topicShareTextFiles(stale),/source|来源/i);
  const missing=structuredClone(record);missing.copy.zh.selectedPostId='deleted';
- assert.throws(()=>topicShareTextFiles(missing),/zh|中文/i);
+ assert.ok(topicShareTextFiles(missing).some(file=>file.name==='post-zh.txt'));
  await assert.rejects(createTopicShareZip(record,{en:new Uint8Array([1]),zh:new Uint8Array()}),/zh|中文/i);
 });
 
@@ -122,15 +122,30 @@ test('mismatched comment labels omit the same evidence from both cards and the s
  assert.match(sources,/https:\/\/www.zhihu.com\/question\/123/);
 });
 
-test('a comment missing its English translation appears in neither card nor the source file',async()=>{
+test('a comment missing its English translation remains in the Chinese card and source file',async()=>{
  const {TopicSharePoster}=await presentation(),{topicShareTextFiles}=await exporting();
  const untranslated=structuredClone(record);delete untranslated.source.commentExamples!.red!.englishText;
- for(const language of ['en','zh'] as const){
-  const card=renderToStaticMarkup(createElement(TopicSharePoster,{record:untranslated,language}));
-  assert.doesNotMatch(card,/comment-quotes|请公布完整证据|Please publish the complete evidence/);
- }
+ const en=renderToStaticMarkup(createElement(TopicSharePoster,{record:untranslated,language:'en'}));
+ assert.doesNotMatch(en,/comment-quotes|Please publish the complete evidence/);
+ const zh=renderToStaticMarkup(createElement(TopicSharePoster,{record:untranslated,language:'zh'}));
+ assert.match(zh,/请公布完整证据/);
  const sources=new TextDecoder().decode(topicShareTextFiles(untranslated).find(file=>file.name==='sources.txt')!.data);
- assert.doesNotMatch(sources,/Comment ID:|Original: 请公布完整证据/);
+ assert.match(sources,/Original: 请公布完整证据/);
+});
+
+test('translation review badges stay in admin and do not leak into public card or text exports',async()=>{
+ const previous=(globalThis as {React?:unknown}).React;(globalThis as {React?:unknown}).React=React;
+ try{
+  const {TopicShareReview}=await import('../src/components/topic-sharing/topic-share-review');
+  const warnings=[{path:'en.posts[2].text',code:'language',message:'PRIVATE_REVIEW_ONLY',values:['<script>']}];
+  const markup=renderToStaticMarkup(createElement(TopicShareReview,{warnings}));
+  assert.match(markup,/候选配文 3/);assert.match(markup,/不影响生成/);assert.match(markup,/&lt;script&gt;/);
+  const reviewed={...record,reviewWarnings:warnings},poster=await presentation(),exports=await exporting();
+  assert.doesNotMatch(renderToStaticMarkup(createElement(poster.TopicSharePoster,{record:reviewed,language:'en'})),/PRIVATE_REVIEW_ONLY|编辑提示/);
+  for(const file of exports.topicShareTextFiles(reviewed))assert.doesNotMatch(new TextDecoder().decode(file.data),/PRIVATE_REVIEW_ONLY|编辑提示/);
+  const mixed=structuredClone(record);mixed.source.commentExamples!.red!.englishText='Please explain 中文名称.';
+  assert.match(renderToStaticMarkup(createElement(poster.TopicSharePoster,{record:mixed,language:'en'})),/Please explain 中文名称/);
+ }finally{(globalThis as {React?:unknown}).React=previous;}
 });
 
 test('analysis-only saved comment evidence keeps its exact original and translation in cards and sources',async()=>{

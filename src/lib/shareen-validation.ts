@@ -50,7 +50,7 @@ export function validateShareEnStructure(value:unknown,report:WccatDailyReport,o
   if(ids.has(h.topicId))throw new Error('Duplicate highlight topic');ids.add(h.topicId);
   let column:EditorialColumn|undefined;
   if(h.column!==undefined||editorial){
-   const allowed=eligibleColumns(shareEnEditorialSource(report,h.topicId));
+   const allowed=eligibleColumns(shareEnEditorialSource(report,h.topicId),{commentLanguage:'en'});
    if(!allowed.includes(h.column as EditorialColumn))throw new Error('Editorial column unavailable for saved comment evidence');
    column=h.column as EditorialColumn;
   }

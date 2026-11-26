@@ -18,7 +18,7 @@ export function selectCommentExamples(sample:CommentSample,battle:Labels,value:u
  const red=highest(sides.red),blue=highest(sides.blue);if(!red&&!blue)return;
  return {...battle,...(red?{red}:{}),...(blue?{blue}:{}),sampleCount:source.size,sampledAt:sample.comments.map(c=>c.observedAt).sort().at(-1)!,runIds:[...sample.runIds]};
 }
-export function visibleCommentQuotes(examples:CommentExamples|undefined,battle:Labels|undefined,language:'zh'|'en'){
+export function visibleCommentQuotes(examples:CommentExamples|undefined,battle:Labels|undefined,language:'zh'|'en',options:{allowMixedEnglish?:boolean}={}){
  if(!examples||!battle||examples.redLabel!==battle.redLabel||examples.blueLabel!==battle.blueLabel||!Number.isFinite(examples.sampleCount)||examples.sampleCount<1)return [];
  const result:Array<{side:CommentSide;quote:CommentQuote;text:string}>=[];
  for(const side of ['red','blue'] as const){
@@ -27,7 +27,7 @@ export function visibleCommentQuotes(examples:CommentExamples|undefined,battle:L
   try{const target=new URL(quote.url),article=new URL(source);if(target.protocol!=='https:'||target.username||target.password||target.origin!==article.origin||target.pathname!==article.pathname||target.search)continue;}catch{continue;}
   if(examples.red?.id&&examples.red.id===examples.blue?.id)continue;
   const text=language==='en'?quote.englishText:quote.text;
-  if(typeof text!=='string'||!text.trim()||(language==='en'&&/\p{Script=Han}/u.test(text)))continue;
+  if(typeof text!=='string'||!text.trim()||(language==='en'&&!options.allowMixedEnglish&&/\p{Script=Han}/u.test(text)))continue;
   result.push({side,quote,text});
  }
  return result;

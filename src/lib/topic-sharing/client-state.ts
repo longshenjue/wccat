@@ -1,4 +1,11 @@
-import type {TopicRecommendation,TopicShareRecord,TopicShareSource} from './types';
+import type {LocalizedTopicShare,TopicRecommendation,TopicShareRecord,TopicShareSource} from './types';
+
+/** Incomplete drafts display the first candidate; editing binds that displayed id. */
+export function updateSelectedTopicSharePost(copy:LocalizedTopicShare,text:string):LocalizedTopicShare {
+ const selected=copy.posts.find(post=>post.id===copy.selectedPostId)??copy.posts[0];
+ if(!selected)return copy;
+ return {...copy,selectedPostId:selected.id,posts:copy.posts.map(post=>post.id===selected.id?{...post,text}:post)};
+}
 
 export type TopicShareEditorData={source:TopicShareSource;recommendation:TopicRecommendation;record:TopicShareRecord|null};
 

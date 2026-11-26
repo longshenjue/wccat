@@ -1,14 +1,16 @@
 "use client";
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import type {EditorialColumn,LocalizedTopicShare,TopicShareCopy,TopicShareLanguage,TopicShareRecord,TopicShareRef} from '../../lib/topic-sharing/types';
 import {EDITORIAL_COLUMNS} from '../../lib/topic-sharing/columns';
 import {eligibleColumns} from '../../lib/topic-sharing/recommendation';
-import {reconcileSavedTopicShareData,reloadTopicShareData,type TopicShareEditorData as TopicShareData} from '../../lib/topic-sharing/client-state';
+import {reconcileSavedTopicShareData,reloadTopicShareData,updateSelectedTopicSharePost,type TopicShareEditorData as TopicShareData} from '../../lib/topic-sharing/client-state';
 import {createTopicShareZip,fitTopicShareCard,topicShareTextFiles,topicSourceHref} from '../../lib/topic-sharing/export';
 import {downloadBlob,nextPaint} from '../../lib/share-export';
 import {ScaledPoster} from '../shareen-poster';
 import {TOPIC_SHARE_WIDTH,TopicSharePoster,topicSharePosterHeight} from './topic-share-poster';
+import {prepareTopicShareDraft} from '../../lib/topic-sharing/validation';
+import {TopicShareReview} from './topic-share-review';
 
 type TopicJob={id:string;status:string;progress?:string;error?:string;result?:{topicSharing?:{id:string}}};
 class TopicShareRequestError extends Error {constructor(message:string,readonly status:number){super(message);}}
@@ -35,12 +37,18 @@ export function TopicShareEditor({sourceRef,recordId,onClose,onRecordSaved}:Edit
  const [exportLanguages,setExportLanguages]=useState<TopicShareLanguage[]>();
  const dialog=useRef<HTMLElement>(null),closeButton=useRef<HTMLButtonElement>(null),exportRoot=useRef<HTMLDivElement>(null),previewRoot=useRef<HTMLDivElement>(null);
  const [layoutError,setLayoutError]=useState('');
+ const [previewHeight,setPreviewHeight]=useState(1800);
  const current=view.key===activeKey?view:undefined,loaded=current?.data;
  const saved=loaded?.record,source=saved?.source??loaded?.source,generationSource=loaded?.source;
  const sourceChanged=Boolean(saved&&generationSource&&saved.source.fingerprint!==generationSource.fingerprint);
  const loading=!current,busy=loading||Boolean(operation)||Boolean(job);
  const editableRecord=saved&&draft?{...saved,copy:draft}:undefined;
- const local=draft?.[language],selected=local?.posts.find(post=>post.id===local.selectedPostId);
+ const local=draft?.[language],selected=local?.posts.find(post=>post.id===local.selectedPostId)??local?.posts[0];
+ const reviewWarnings=useMemo(()=>{
+  if(!draft||!source)return [];
+  try{return prepareTopicShareDraft(draft,source).reviewWarnings;}
+  catch{return [{path:'draft',code:'review_unavailable',message:'自动提示暂不可用，当前编辑已保留。'}];}
+ },[draft,source]);
 
  useEffect(()=>{
   const controller=new AbortController();
@@ -92,7 +100,7 @@ export function TopicShareEditor({sourceRef,recordId,onClose,onRecordSaved}:Edit
   let active=true;
   const check=()=>{
    const card=previewRoot.current?.querySelector<HTMLElement>('.topic-share-card');if(!card||!active)return;
-   try{fitTopicShareCard(card,language.toUpperCase());setLayoutError('');}catch(cause){setLayoutError(cause instanceof Error?cause.message:'预览文案超出卡片。');}
+   try{fitTopicShareCard(card,language.toUpperCase());setPreviewHeight(card.offsetHeight);setLayoutError('');}catch(cause){setLayoutError(cause instanceof Error?cause.message:'预览文案超出卡片。');}
   };
   void document.fonts.ready.then(check);
   return ()=>{active=false;};
@@ -145,7 +153,7 @@ export function TopicShareEditor({sourceRef,recordId,onClose,onRecordSaved}:Edit
    const pngs:Partial<Record<TopicShareLanguage,Uint8Array>>={};
    for(const card of cards){
     const lang=card.dataset.topicLanguage as TopicShareLanguage;
-    const blob=await toBlob(card,{width:TOPIC_SHARE_WIDTH,height:topicSharePosterHeight(record,lang),pixelRatio:1,backgroundColor:'#f8fafc',skipFonts:true});
+    const blob=await toBlob(card,{width:TOPIC_SHARE_WIDTH,height:card.offsetHeight,pixelRatio:1,backgroundColor:'#f8fafc',skipFonts:true});
     if(!blob)throw new Error(`${lang.toUpperCase()} PNG 导出失败。`);
     if(languages.length===1)downloadBlob(blob,`WcCAT-${record.source.date}-${record.copy.column}-${lang}.png`);
     else pngs[lang]=new Uint8Array(await blob.arrayBuffer());
@@ -169,19 +177,20 @@ export function TopicShareEditor({sourceRef,recordId,onClose,onRecordSaved}:Edit
   {loading?<p role="status">正在读取这个保存版本的话题…</p>:current?.error?<div><p className="data-error" role="alert">{current.error}</p><button type="button" disabled={busy} onClick={reload}>重新读取话题</button></div>:null}
   {source&&loaded?<>
    <section className="topic-source-summary"><p className="topic-eyebrow">{source.date} · {source.ref.kind==='hourly'?'小时采样':'日报条目'} · 原榜 #{source.rank}</p><h3>{source.title}</h3><p>{source.summary}</p><details><summary>已保存事实与原始来源</summary><p>{source.detail}</p><p>{source.context}</p><ul>{source.links.map((link,index)=>{const href=topicSourceHref(link.url);return <li key={index}>{href?<a href={href} target="_blank" rel="noopener noreferrer">{link.sourceName} · {link.title} ↗</a>:`${link.sourceName} · 原文链接不可用`}</li>;})}</ul></details></section>
-   <div className="topic-generation-bar"><label>栏目<select value={column} disabled={busy||dirty} onChange={event=>setColumn(event.target.value as EditorialColumn)}>{EDITORIAL_COLUMNS.map(item=><option key={item.id} value={item.id} disabled={!eligibleColumns(generationSource??source).includes(item.id)}>{item.en} / {item.zh}</option>)}</select></label><button type="button" className="data-primary" disabled={busy||dirty||conflict||!eligibleColumns(generationSource??source).includes(column)} onClick={generate}>{operation==='generate'?'正在创建任务…':saved?'重新生成双语文案 · AI':'生成双语文案 · AI'}</button><button type="button" disabled={busy} onClick={reload}>重新载入保存稿</button></div>
+   <div className="topic-generation-bar"><label>栏目<select value={column} disabled={busy||dirty} onChange={event=>setColumn(event.target.value as EditorialColumn)}>{EDITORIAL_COLUMNS.map(item=><option key={item.id} value={item.id}>{item.en} / {item.zh}{eligibleColumns(generationSource??source).includes(item.id)?'':'（材料待核对）'}</option>)}</select></label><button type="button" className="data-primary" disabled={busy||dirty||conflict} onClick={generate}>{operation==='generate'?'正在创建任务…':saved?'重新生成双语文案 · AI':'生成双语文案 · AI'}</button><button type="button" disabled={busy} onClick={reload}>重新载入保存稿</button></div>
    {sourceChanged?<p className="topic-notice">源材料已有更新。当前预览和保存仍使用这份稿件的冻结来源；重新生成会使用最新材料。</p>:null}
    <p className="topic-small">{EDITORIAL_COLUMNS.find(item=>item.id===column)?.description} {saved&&column!==saved.copy.column?'新栏目在重新生成后生效。':''}</p>
-   {!eligibleColumns(generationSource??source).includes('voices')?<p className="topic-small">“他们怎么说”需要已保存、标签匹配且可用于双语的真实评论；材料不足时不会强造观点。</p>:null}
+   {!eligibleColumns(generationSource??source).includes('voices')?<p className="topic-small">原始评论只展示已保存、来源有效的内容；译文缺失或存疑时会提示，仍可生成和编辑双语正文。</p>:null}
    {loaded.recommendation.warnings.length?<details className="topic-evidence-notes"><summary>编辑判断与材料限制</summary><ul>{loaded.recommendation.warnings.map((warning,index)=><li key={index}>{warning}</li>)}</ul></details>:null}
    {job?<div className="topic-notice" role="status">后台生成中 · {job.progress||job.status} <a href="/admin?tab=tasks" target="_blank" rel="noopener noreferrer">查看任务日志 ↗</a></div>:null}
    {dirty?<p className="topic-notice" role="status">有未保存编辑。预览显示当前编辑稿；保存后才能导出或重新生成。中英文切换会保留两种语言的修改。</p>:null}
    {conflict?<div className="topic-conflict" role="alert"><p>服务器稿件或来源已更新。本地修改已保留，可先复制配文，再重新载入保存稿。</p></div>:null}
    {editableRecord&&local?<>
+    <TopicShareReview warnings={reviewWarnings}/>
     <div className="topic-editor-toolbar"><div className="topic-language-tabs" role="tablist" aria-label="分享语言">{(['en','zh'] as const).map(lang=><button key={lang} type="button" role="tab" aria-selected={language===lang} aria-controls="topic-localized-content" id={`topic-language-${lang}`} disabled={operation==='export'} onClick={()=>setLanguage(lang)}>{lang==='en'?'English':'中文'}</button>)}</div><span className={dirty?'topic-draft-badge':'topic-saved-badge'}>{dirty?'未保存编辑':'已保存版本'}</span><button type="button" className="data-primary" disabled={busy||!dirty||conflict} onClick={save}>{operation==='save'?'正在保存…':'保存双语编辑'}</button></div>
     <div className="topic-editor-workspace" id="topic-localized-content" role="tabpanel" aria-labelledby={`topic-language-${language}`}>
-     <section className="topic-copy-editor"><h3>{language==='en'?'English copy':'中文文案'}</h3><label>配文候选<select value={local.selectedPostId} disabled={busy} onChange={event=>edit(copy=>({...copy,selectedPostId:event.target.value}))}>{local.posts.map((post,index)=><option key={post.id} value={post.id}>{index+1}. {postPatternLabels[post.pattern]??'其他角度'}</option>)}</select></label>{selected?<><p className="topic-small">选择理由：{selected.reason}</p><label>所选配文<textarea lang={language} rows={7} value={selected.text} disabled={busy} onChange={event=>edit(copy=>({...copy,posts:copy.posts.map(post=>post.id===copy.selectedPostId?{...post,text:event.target.value}:post)}))}/></label></>:null}<button type="button" disabled={!selected} onClick={copyPost}>复制当前配文</button><details open><summary>编辑卡片与补充内容</summary>{fields.map(([field,label])=><label key={field}>{label}<textarea lang={language} rows={field==='headline'||field==='hook'||field==='question'?2:3} value={local[field]} disabled={busy} onChange={event=>edit(copy=>({...copy,[field]:event.target.value}))}/></label>)}<label>补充回复 / 来源回复（每段一条）<textarea lang={language} rows={5} value={local.replies.join('\n\n')} disabled={busy} onChange={event=>edit(copy=>({...copy,replies:event.target.value.split(/\n\s*\n/)}))}/></label></details></section>
-     <section className="topic-preview-panel"><h3>品牌卡片预览</h3><div ref={previewRoot}><ScaledPoster width={TOPIC_SHARE_WIDTH} height={topicSharePosterHeight(editableRecord,language)}><TopicSharePoster record={editableRecord} language={language}/></ScaledPoster></div>{layoutError?<p className="data-error" role="alert">{layoutError}</p>:null}<p className="topic-small">1080 × {topicSharePosterHeight(editableRecord,language)} · {dirty?'当前编辑稿':'已保存稿'} · 真实评论沿用保存来源，不能在这里修改。</p><div className="topic-export-actions"><button type="button" disabled={busy||dirty||conflict||Boolean(layoutError)} onClick={()=>download([language])}>↓ {language==='en'?'English':'中文'} PNG</button><button type="button" disabled={busy||dirty||conflict||Boolean(layoutError)} onClick={()=>download(['en','zh'])}>↓ 双语完整 ZIP</button></div><p className="topic-small">ZIP：en.png / zh.png、双语配文、补充回复、Alt text、原始来源与实验说明。</p></section>
+     <section className="topic-copy-editor"><h3>{language==='en'?'English copy':'中文文案'}</h3><label>配文候选<select value={selected?.id??''} disabled={busy} onChange={event=>edit(copy=>({...copy,selectedPostId:event.target.value}))}>{local.posts.map((post,index)=><option key={post.id} value={post.id}>{index+1}. {postPatternLabels[post.pattern]??'其他角度'}{reviewWarnings.some(item=>item.path.startsWith(`${language}.posts[${index}].`))?' ⚠':''}</option>)}</select></label>{selected?<><p className="topic-small">选择理由：{selected.reason}</p><label>所选配文<textarea aria-label="所选配文" lang={language} rows={7} value={selected.text} disabled={busy} onChange={event=>edit(copy=>updateSelectedTopicSharePost(copy,event.target.value))}/></label></>:null}<button type="button" disabled={!selected} onClick={copyPost}>复制当前配文</button><details open><summary>编辑卡片与补充内容</summary>{fields.map(([field,label])=><label key={field}>{label}<textarea aria-label={label} lang={language} rows={field==='headline'||field==='hook'||field==='question'?2:3} value={local[field]} disabled={busy} onChange={event=>edit(copy=>({...copy,[field]:event.target.value}))}/></label>)}<label>补充回复 / 来源回复（每段一条）<textarea aria-label="补充回复 / 来源回复（每段一条）" lang={language} rows={5} value={local.replies.join('\n\n')} disabled={busy} onChange={event=>edit(copy=>({...copy,replies:event.target.value.split(/\n\s*\n/)}))}/></label></details></section>
+     <section className="topic-preview-panel"><h3>品牌卡片预览</h3><div ref={previewRoot}><ScaledPoster width={TOPIC_SHARE_WIDTH} height={previewHeight}><TopicSharePoster record={editableRecord} language={language}/></ScaledPoster></div>{layoutError?<p className="data-error" role="alert">{layoutError}</p>:null}<p className="topic-small">1080 × {previewHeight} · {dirty?'当前编辑稿':'已保存稿'} · 真实评论沿用保存来源，不能在这里修改。</p><div className="topic-export-actions"><button type="button" disabled={busy||dirty||conflict||Boolean(layoutError)} onClick={()=>download([language])}>↓ {language==='en'?'English':'中文'} PNG</button><button type="button" disabled={busy||dirty||conflict||Boolean(layoutError)} onClick={()=>download(['en','zh'])}>↓ 双语完整 ZIP</button></div><p className="topic-small">ZIP：en.png / zh.png、双语配文、补充回复、Alt text、原始来源与实验说明。</p></section>
     </div>
    </>:<div className="topic-empty"><h3>尚未生成这个话题的双语分享</h3><p>先核对材料与栏目，再点击“生成双语文案 · AI”。生成后可独立编辑英文和中文内容。</p></div>}
   </>:null}

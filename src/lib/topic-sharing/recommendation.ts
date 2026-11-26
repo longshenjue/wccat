@@ -2,13 +2,12 @@ import {visibleCommentQuotes} from '../comments/selection';
 import {topicEvidenceTexts} from './evidence';
 import type {EditorialColumn,TopicRecommendation,TopicShareLanguage,TopicShareSource} from './types';
 
-/** A bilingual package can use only the same saved, label-matched evidence in both languages. */
+/** Original comments remain usable when their saved English translation is missing. */
 export function usableTopicQuotes(source:TopicShareSource,language:TopicShareLanguage) {
  const examples=source.commentExamples??source.analysis?.commentExamples,battle=source.analysis?.battle;
- const en=visibleCommentQuotes(examples,battle,'en').filter(item=>/[a-z]/i.test(item.text));
+ const en=visibleCommentQuotes(examples,battle,'en',{allowMixedEnglish:true});
  const zh=visibleCommentQuotes(examples,battle,'zh');
- const ids=new Set(en.filter(item=>zh.some(other=>other.quote.id===item.quote.id)).map(item=>item.quote.id));
- return (language==='en'?en:zh).filter(item=>ids.has(item.quote.id));
+ return language==='zh'?zh:en.filter(item=>zh.some(other=>other.quote.id===item.quote.id));
 }
 function topicKind(source:TopicShareSource){
  const text=[source.title,...source.categories].join(' '),material=topicEvidenceTexts(source).join(' '),all=text+' '+material;
@@ -28,11 +27,19 @@ function topicKind(source:TopicShareSource){
   crossBorder:/出海|海外|跨境|出口|全球市场|国际市场|\b(?:overseas|cross.border|exports?|international market)\b/i.test(all)
  };
 }
-export function eligibleColumns(source:TopicShareSource):EditorialColumn[] {
- return ['inside',...(usableTopicQuotes(source,'en').length?['voices' as const]:[]),...(topicKind(source).tech?['tech' as const]:[])] as EditorialColumn[];
+type EditorialAudience={commentLanguage?:'en'|'zh'};
+function editorialQuotes(source:TopicShareSource,audience:EditorialAudience){
+ if(audience.commentLanguage!=='en')return usableTopicQuotes(source,'zh');
+ // The separate daily-English workflow retains its existing column selection.
+ const examples=source.commentExamples??source.analysis?.commentExamples;
+ const originals=new Set(usableTopicQuotes(source,'zh').map(item=>item.quote.id));
+ return visibleCommentQuotes(examples,source.analysis?.battle,'en').filter(item=>/[a-z]/i.test(item.text)&&originals.has(item.quote.id));
 }
-export function recommendTopic(source:TopicShareSource):TopicRecommendation {
- const kind=topicKind(source),quotes=usableTopicQuotes(source,'en'),evidence=topicEvidenceTexts(source);
+export function eligibleColumns(source:TopicShareSource,audience:EditorialAudience={}):EditorialColumn[] {
+ return ['inside',...(editorialQuotes(source,audience).length?['voices' as const]:[]),...(topicKind(source).tech?['tech' as const]:[])] as EditorialColumn[];
+}
+export function recommendTopic(source:TopicShareSource,audience:EditorialAudience={}):TopicRecommendation {
+ const kind=topicKind(source),quotes=editorialQuotes(source,audience),evidence=topicEvidenceTexts(source);
  const hasAnalysis=evidence.length>0;
  const evidenceLevel=quotes.length?'comments':hasAnalysis?'analysis':'headline';
  const column:EditorialColumn=quotes.length?'voices':kind.tech&&!kind.creator?'tech':'inside';
@@ -42,7 +49,8 @@ export function recommendTopic(source:TopicShareSource):TopicRecommendation {
  const score=(extra:number)=>Math.max(0,Math.min(hasAnalysis||quotes.length?95:32,Math.round(base+extra)));
  const warnings:string[]=[];
  if(evidenceLevel==='headline')warnings.push('仅有标题材料：事实和背景不足，先补充核实，降低编辑优先级。');
- if(!quotes.length)warnings.push('没有可同时用于中英文、标签匹配且来源有效的真实评论，不能选择“他们怎么说”。');
+ if(!quotes.length)warnings.push('尚未保存可展示的原始评论，该栏目目前只能生成正文草稿，请自行核对。');
+ if(quotes.length>usableTopicQuotes(source,'en').length)warnings.push('部分原始评论尚无可展示的英文译文，不影响正文生成；英文卡片会暂时省略该条。');
  if(kind.verify)warnings.push('标题含需要核实的重大主张、夸张表述或梗；核对原文与事件状态，不能按字面扩大解读。');
  const subject=`「${source.title.slice(0,120)}」`,anchor=evidence[0];
  const savedAngle=anchor?`材料切口：${anchor.replace(/\s+/g,' ').slice(0,150)}`:'目前只有标题，先补可核实的具体信息。';
@@ -53,7 +61,7 @@ export function recommendTopic(source:TopicShareSource):TopicRecommendation {
  const englishCues=[kind.techEntity?'recognizable technology company/person clues':kind.tech?'a concrete technology/consumer angle':'',kind.community?'creator/community context to explain':kind.culture?'cultural meaning to translate':'',kind.business?'a saved business category':'',kind.crossBorder?'an explicit cross-border cue in saved material':'',kind.life?'everyday relevance':''].filter(Boolean).join('; ')||'a source-grounded attention story';
  return {
   column,evidenceLevel,warnings,
-  english:{score:score(englishExtra),reason:`Editorial priority only, not a viral probability: ${subject}; ${evidenceLevel==='comments'?'saved bilingual comment evidence':hasAnalysis?'saved explanatory material':'headline evidence only'}; ${englishCues}${kind.verify?'; headline claim requires verification':''}.`,angle:englishAngle+' '+savedAngle},
+  english:{score:score(englishExtra),reason:`Editorial priority only, not a viral probability: ${subject}; ${evidenceLevel==='comments'?'saved attributed comment evidence':hasAnalysis?'saved explanatory material':'headline evidence only'}; ${englishCues}${kind.verify?'; headline claim requires verification':''}.`,angle:englishAngle+' '+savedAngle},
   chinese:{score:score(chineseExtra),reason:`编辑优先级，不是爆款概率：${subject}；${evidenceLevel==='comments'?'有可追溯的双语个人评论':hasAnalysis?'有已保存的事实与背景材料':'仅有标题，材料不足'}；${kind.life?'日常生活关联较直接':kind.creator?'有创作者与粉丝社区的具体语境':kind.tech?'可说明人物、公司或产品的具体变化':kind.culture?'需要解释文化表达与使用场景':'需讲清具体事件'}${kind.business?'；商业类别提供辅助线索':''}${kind.verify?'；标题主张仍需核实':''}。`,angle:chineseAngle+' '+savedAngle}
  };
 }

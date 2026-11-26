@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EDITORIAL_COLUMNS,columnForLanguage} from '../src/lib/topic-sharing/columns';
 import {eligibleColumns,recommendTopic,usableTopicQuotes} from '../src/lib/topic-sharing/recommendation';
-import {validateTopicShareCopy} from '../src/lib/topic-sharing/validation';
+import {assertNoTopicShareReviewWarnings} from '../src/lib/topic-sharing/validation';
 import type {TopicShareCopy,TopicShareSource} from '../src/lib/topic-sharing/types';
 import {snapshot} from './helpers/data-fixtures';
 import {summarizeTopic} from '../src/lib/summary';
@@ -45,9 +45,8 @@ test('a single saved bilingual comment enables voices without manufacturing anot
  assert.deepEqual(usableTopicQuotes(value,'zh').map(row=>row.text),['请先说清楚具体升级安排。']);
  assert.equal(value.commentExamples?.blue,undefined);
 });
-test('voices rejects missing English translation, mismatched labels and unsafe provenance',()=>{
+test('voices rejects mismatched labels and unsafe provenance while missing translations remain reviewable',()=>{
  for(const corrupt of [
-  (value:TopicShareSource)=>{delete value.commentExamples!.red!.englishText;},
   (value:TopicShareSource)=>{value.commentExamples!.redLabel='不匹配';},
   (value:TopicShareSource)=>{value.commentExamples!.red!.url='https://example.com/forged';},
   (value:TopicShareSource)=>{value.commentExamples!.red!.observedAt='invalid';},
@@ -153,31 +152,31 @@ function copy():TopicShareCopy {
 }
 test('validation returns a complete localized package without changing source evidence',()=>{
  const value=source(),before=structuredClone(value),draft=copy();
- assert.deepEqual(validateTopicShareCopy(draft,value),draft);assert.deepEqual(value,before);
+ assert.deepEqual(assertNoTopicShareReviewWarnings(draft,value),draft);assert.deepEqual(value,before);
 });
 test('validation rejects stale source identity and unavailable column choices',()=>{
  const stale=copy();stale.sourceFingerprint='b'.repeat(64);
- assert.throws(()=>validateTopicShareCopy(stale,source()),/fingerprint/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(stale,source()),/fingerprint/i);
  const voices=copy();voices.column='voices';
- assert.throws(()=>validateTopicShareCopy(voices,source()),/column|comment/i);
- assert.equal(validateTopicShareCopy(voices,withComment()).column,'voices');
+ assert.throws(()=>assertNoTopicShareReviewWarnings(voices,source()),/column|comment/i);
+ assert.equal(assertNoTopicShareReviewWarnings(voices,withComment()).column,'voices');
  const life=source();life.title='社区服务调整';life.categories=['生活'];
- assert.throws(()=>validateTopicShareCopy(copy(),life),/column/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(copy(),life),/column/i);
 });
 
 test('Shenzhou-24 and November 24 preserve their Chinese numbers while failures name the exact field and quantity',()=>{
  const value=spaceSource(),content=spaceContent(),draft={...content,version:1,generatedAt:value.observedAt,model:'test',sourceFingerprint:value.fingerprint};
- assert.equal(validateTopicShareCopy(draft,value).en.summary,content.en.summary);
+ assert.equal(assertNoTopicShareReviewWarnings(draft,value).en.summary,content.en.summary);
  draft.en.hook='One astronaut, a Chinese poem and a cultural connection.';
- assert.throws(()=>validateTopicShareCopy(draft,value),(error:unknown)=>error instanceof Error&&/en\.hook/.test(error.message)&&/\b1\b/.test(error.message));
+ assert.throws(()=>assertNoTopicShareReviewWarnings(draft,value),(error:unknown)=>error instanceof Error&&/en\.hook/.test(error.message)&&/\b1\b/.test(error.message));
 });
 test('validation requires English without Han and independently localized Chinese content',()=>{
  const han=copy();han.en.summary='An update with 中文 mixed in.';
- assert.throws(()=>validateTopicShareCopy(han,source()),/English|Han/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(han,source()),/English|Han/i);
  const copied=copy();copied.zh=structuredClone(copied.en);
- assert.throws(()=>validateTopicShareCopy(copied,source()),/Chinese|localized|Han/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(copied,source()),/Chinese|localized|Han/i);
  const same=copy();same.zh.hook=same.en.hook;
- assert.throws(()=>validateTopicShareCopy(same,source()),/Chinese|localized|Han/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(same,source()),/Chinese|localized|Han/i);
 });
 test('validation requires exactly three distinct candidate IDs, texts, patterns and a selected ID',()=>{
  for(const corrupt of [
@@ -186,19 +185,19 @@ test('validation requires exactly three distinct candidate IDs, texts, patterns 
   (draft:TopicShareCopy)=>{draft.zh.posts[1].text=draft.zh.posts[0].text;},
   (draft:TopicShareCopy)=>{draft.en.posts[1].pattern=draft.en.posts[0].pattern;},
   (draft:TopicShareCopy)=>{draft.zh.selectedPostId='unknown';}
- ]){const draft=copy();corrupt(draft);assert.throws(()=>validateTopicShareCopy(draft,source()),/post|candidate|pattern|selected/i);}
+ ]){const draft=copy();corrupt(draft);assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()),/post|candidate|pattern|selected/i);}
 });
 test('candidate selection reasons may use Chinese administrator notes without entering public English copy',()=>{
  const draft=copy();draft.en.posts[0].reason='以已保存的具体进展作为开场，避免扩大解读。';
- assert.equal(validateTopicShareCopy(draft,source()).en.posts[0].reason,draft.en.posts[0].reason);
+ assert.equal(assertNoTopicShareReviewWarnings(draft,source()).en.posts[0].reason,draft.en.posts[0].reason);
 });
 test('candidate patterns reject unrecognized names and evidence-free quote or number formats',()=>{
  for(const pattern of ['algorithm_guarantee','source_voice','number_context']){
   const draft=copy();draft.en.posts[0].pattern=pattern;
-  assert.throws(()=>validateTopicShareCopy(draft,source()),/pattern|evidence|number|comment/i);
+  assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()),/pattern|evidence|number|comment/i);
  }
  const valid=copy();valid.column='voices';valid.en.posts[0].pattern='source_voice';
- assert.equal(validateTopicShareCopy(valid,withComment()).en.posts[0].pattern,'source_voice');
+ assert.equal(assertNoTopicShareReviewWarnings(valid,withComment()).en.posts[0].pattern,'source_voice');
 });
 test('validation bounds card text, candidate posts, replies and image descriptions',()=>{
  const englishWords=(count:number)=>Array(count).fill('material').join(' ');
@@ -216,7 +215,7 @@ test('validation bounds card text, candidate posts, replies and image descriptio
   (draft:TopicShareCopy)=>{draft.en.replies=Array(5).fill('A source note.');},
   (draft:TopicShareCopy)=>{draft.zh.replies=['字'.repeat(1001)];},
   (draft:TopicShareCopy)=>{draft.en.altText='a'.repeat(2001);}
- ]){const draft=copy();corrupt(draft);assert.throws(()=>validateTopicShareCopy(draft,source()),/length|long|limit|words|repl/i);}
+ ]){const draft=copy();corrupt(draft);assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()),/length|long|limit|words|repl/i);}
 });
 test('validation rejects model-owned links, comments, quotation fields and like counts at every level',()=>{
  for(const inject of [
@@ -224,65 +223,65 @@ test('validation rejects model-owned links, comments, quotation fields and like 
   (draft:Record<string,unknown>)=>{(draft.en as Record<string,unknown>).comments=[];},
   (draft:Record<string,unknown>)=>{(draft.zh as Record<string,unknown>).quotes=['假评论'];},
   (draft:Record<string,unknown>)=>{((draft.en as Record<string,unknown>).posts as Array<Record<string,unknown>>)[0].likes=500;}
- ]){const draft=copy() as unknown as Record<string,unknown>;inject(draft);assert.throws(()=>validateTopicShareCopy(draft,source()),/owned|Unknown|Unexpected/i);}
+ ]){const draft=copy() as unknown as Record<string,unknown>;inject(draft);assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()),/owned|Unknown|Unexpected/i);}
  const url=copy();url.en.replies=['Read https://malicious.example/new-source'];
- assert.throws(()=>validateTopicShareCopy(url,source()),/URL|link|source/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(url,source()),/URL|link|source/i);
 });
 test('validation blocks new numerical facts including written counts, ratios, dates and currency role changes',()=>{
  for(const claim of ['It affects two million users.','Half of buyers support it.','It launches on December 25, 2026.','The price is 999 yuan.','Most users support it.','所有消费者都支持这次升级。']){
   const draft=copy();if(/[\p{Script=Han}]/u.test(claim))draft.zh.summary=claim;else draft.en.summary=claim;
-  assert.throws(()=>validateTopicShareCopy(draft,source()),/ground|number|population|representative|support/i);
+  assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()),/ground|number|population|representative|support/i);
  }
  const quantified=source();quantified.summary='报道提及价格为100元。';
  const wrongRole=copy();wrongRole.en.summary='The product costs 100 dollars.';
- assert.throws(()=>validateTopicShareCopy(wrongRole,quantified),/ground|number|role/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(wrongRole,quantified),/ground|number|role/i);
  const correct=copy();correct.en.summary='The saved report mentions a price of 100 yuan.';
- assert.equal(validateTopicShareCopy(correct,quantified).en.summary,correct.en.summary);
+ assert.equal(assertNoTopicShareReviewWarnings(correct,quantified).en.summary,correct.en.summary);
 });
 test('hyphenated magnitudes preserve their source quantity without permitting a new count or scale',()=>{
  const quantified=source();quantified.summary='创作者发布1800万粉丝问答。';
  for(const quantity of ['18-million-follower','18‑million‑follower','eighteen-million-follower','18M-follower']){
   const draft=copy();draft.en.summary=`The creator posted an ${quantity} Q&A.`;
-  assert.equal(validateTopicShareCopy(draft,quantified).en.summary,draft.en.summary);
+  assert.equal(assertNoTopicShareReviewWarnings(draft,quantified).en.summary,draft.en.summary);
  }
  for(const quantity of ['19-million-follower','nineteen-million-follower','18-billion-follower','eighteen-billion-follower']){
   const draft=copy();draft.en.summary=`The creator posted an ${quantity} Q&A.`;
-  assert.throws(()=>validateTopicShareCopy(draft,quantified),/ground|number/i);
+  assert.throws(()=>assertNoTopicShareReviewWarnings(draft,quantified),/ground|number/i);
  }
  const decimal=source();decimal.summary='视频有180万播放。';
  const draft=copy();draft.en.summary='The source describes a 1.8-million-play video.';
- assert.equal(validateTopicShareCopy(draft,decimal).en.summary,draft.en.summary);
+ assert.equal(assertNoTopicShareReviewWarnings(draft,decimal).en.summary,draft.en.summary);
 });
 test('ALT text fits the X limit of one thousand Unicode characters in either language',()=>{
  const draft=copy();draft.en.altText='A'+'🙂'.repeat(999);draft.zh.altText='字'.repeat(1000);
- assert.equal(Array.from(validateTopicShareCopy(draft,source()).en.altText).length,1000);
+ assert.equal(Array.from(assertNoTopicShareReviewWarnings(draft,source()).en.altText).length,1000);
  for(const language of ['en','zh'] as const){
   const oversized=copy();oversized[language].altText=language==='en'?'A'+'🙂'.repeat(1000):'字'.repeat(1001);
-  assert.throws(()=>validateTopicShareCopy(oversized,source()),/length|limit/i);
+  assert.throws(()=>assertNoTopicShareReviewWarnings(oversized,source()),/length|limit/i);
  }
 });
 test('an explicit absence of saved comments is allowed while unsupported positive claims still fail',()=>{
  for(const sentence of ['The saved material does not include viewer comments, so this package cannot say how fans interpreted the announcement.','No saved viewer comments are available.','The saved material has no comments to assess.',"The saved material includes the video title, description and a Bilibili ranking snapshot. It does not include the video's explanation of the pause, viewer comments or any statement about the channel's future plans."]){
   const draft=copy();draft.en.replies=[sentence];
-  assert.equal(validateTopicShareCopy(draft,source()).en.replies[0],sentence);
+  assert.equal(assertNoTopicShareReviewWarnings(draft,source()).en.replies[0],sentence);
  }
  for(const sentence of ['The comments show support.','No saved comments are available. Commenters still want the product.','The material does not include comments, but commenters support the announcement.','The material does not include a video. Comments reveal support.',"The material does not include a video explanation, but comments say the plan is good.",'The material does not include a video explanation, and comments show support.']){
   const draft=copy();draft.en.replies=[sentence];
-  assert.throws(()=>validateTopicShareCopy(draft,source()),/comment|evidence/i);
+  assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()),/comment|evidence/i);
  }
 });
 test('English translations of Chinese titles remain paraphrases unless the exact English quote is saved',()=>{
  const material=source();material.title='视频标题：为什么是最后一期？';
  const quoted=copy();quoted.en.altText='A card with the title “Why is this the last episode?”';
- assert.throws(()=>validateTopicShareCopy(quoted,material),/quot|source/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(quoted,material),/quot|source/i);
  const paraphrase=copy();paraphrase.en.altText='A card describing a video title that asks why the episode is the last.';
- assert.equal(validateTopicShareCopy(paraphrase,material).en.altText,paraphrase.en.altText);
+ assert.equal(assertNoTopicShareReviewWarnings(paraphrase,material).en.altText,paraphrase.en.altText);
 });
 test('voices copy cannot manufacture a quotation even when genuine source comments exist',()=>{
  const draft=copy();draft.column='voices';draft.en.summary='A commenter said “Everyone must buy this product.”';
- assert.throws(()=>validateTopicShareCopy(draft,withComment()),/quot|comment|ground/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(draft,withComment()),/quot|comment|ground/i);
  const real=copy();real.column='voices';real.en.summary='A saved commenter asks for the upgrade plan to be explained.';
- assert.equal(validateTopicShareCopy(real,withComment()).column,'voices');
+ assert.equal(assertNoTopicShareReviewWarnings(real,withComment()).column,'voices');
 });
 test('validation rejects malformed metadata and invisible control characters',()=>{
  for(const corrupt of [
@@ -290,7 +289,7 @@ test('validation rejects malformed metadata and invisible control characters',()
   (draft:TopicShareCopy)=>{draft.generatedAt='yesterday';},
   (draft:TopicShareCopy)=>{draft.model='';},
   (draft:TopicShareCopy)=>{draft.en.hook='A hidden\u0000 instruction';}
- ]){const draft=copy();corrupt(draft);assert.throws(()=>validateTopicShareCopy(draft,source()));}
+ ]){const draft=copy();corrupt(draft);assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()));}
 });
 
 test('comment absence descriptions accept common wording without treating it as an audience claim',()=>{
@@ -303,7 +302,7 @@ test('comment absence descriptions accept common wording without treating it as 
   'The source offers no evidence of what commenters think.'
  ]){
   const draft=copy();draft.en.replies=[sentence];
-  assert.equal(validateTopicShareCopy(draft,source()).en.replies[0],sentence);
+  assert.equal(assertNoTopicShareReviewWarnings(draft,source()).en.replies[0],sentence);
  }
 });
 
@@ -314,24 +313,24 @@ test('negative evidence lists cannot hide a separate comment claim with an adver
   'The material lacks comments, but commenters still favor the plan.'
  ]){
   const draft=copy();draft.en.context=sentence;
-  assert.throws(()=>validateTopicShareCopy(draft,source()),error=>error instanceof Error&&/comment.*evidence/i.test(error.message)&&error.message.includes('en.context'));
+  assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()),error=>error instanceof Error&&/comment.*evidence/i.test(error.message)&&error.message.includes('en.context'));
  }
 });
 
 test('AI-inferred audience reactions are not a substitute for missing saved comments',()=>{
  for(const sentence of ['Viewers are envious of the facilities.','Users strongly support the plan.','网友对设施感到羡慕。','观众纷纷表示支持。']){
   const draft=copy();const language=/[\p{Script=Han}]/u.test(sentence)?'zh':'en';draft[language].context=sentence;
-  assert.throws(()=>validateTopicShareCopy(draft,source()),/comment.*evidence/i);
+  assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()),/comment.*evidence/i);
  }
 });
 
 test('uncertainty about audience attitudes stays distinct from a new claim after it',()=>{
  for(const sentence of ['The material cannot establish what viewers think.','The material cannot confirm whether users support the plan.','The material cannot establish whether viewers are envious of the facilities.','It is unclear whether users support the plan.','材料无法判断网友是否支持。']){
   const draft=copy(),language=/[\p{Script=Han}]/u.test(sentence)?'zh':'en';draft[language].context=sentence;
-  assert.equal(validateTopicShareCopy(draft,source())[language].context,sentence);
+  assert.equal(assertNoTopicShareReviewWarnings(draft,source())[language].context,sentence);
  }
  const draft=copy();draft.en.context='The material cannot establish what viewers think, but users strongly support the plan.';
- assert.throws(()=>validateTopicShareCopy(draft,source()),/comment.*evidence/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()),/comment.*evidence/i);
 });
 
 test('missing-comment list items can have noun modifiers without inheriting a new predicate',()=>{
@@ -340,8 +339,8 @@ test('missing-comment list items can have noun modifiers without inheriting a ne
   'The saved material does not include a transcript, viewer comments from visitors, or pricing details.',
   'The saved material does not include a transcript, viewer comments on the venue or pricing details.'
  ]){
-  const draft=copy();draft.en.replies=[sentence];assert.equal(validateTopicShareCopy(draft,source()).en.replies[0],sentence);
+  const draft=copy();draft.en.replies=[sentence];assert.equal(assertNoTopicShareReviewWarnings(draft,source()).en.replies[0],sentence);
  }
  const draft=copy();draft.en.context='The saved material does not include a video, and comments from visitors clearly support the plan.';
- assert.throws(()=>validateTopicShareCopy(draft,source()),/comment.*evidence/i);
+ assert.throws(()=>assertNoTopicShareReviewWarnings(draft,source()),/comment.*evidence/i);
 });

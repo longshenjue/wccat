@@ -13,8 +13,8 @@ function CatMarker({side,language}:{side:'red'|'blue';language:'zh'|'en'}){
 }
 const names:Record<string,string>={bilibili:'Bilibili',zhihu:'Zhihu',weibo:'Weibo',hupu:'Hupu',douban:'Douban',tieba:'Baidu Tieba',thepaper:'The Paper','qq-news':'Tencent News','sina-news':'Sina News','netease-news':'NetEase News',ithome:'IT Home',huxiu:'Huxiu',toutiao:'Toutiao'};
 /** Absent, unclassified or untranslated samples occupy no space. */
-export function CommentQuotes({examples,battle,language='zh'}:{examples?:CommentExamples;battle?:{redLabel:string;blueLabel:string};language?:'zh'|'en'}){
- const rows=visibleCommentQuotes(examples,battle,language);if(!rows.length)return null;
+export function CommentQuotes({examples,battle,language='zh',allowMixedEnglish=false}:{examples?:CommentExamples;battle?:{redLabel:string;blueLabel:string};language?:'zh'|'en';allowMixedEnglish?:boolean}){
+ const rows=visibleCommentQuotes(examples,battle,language,{allowMixedEnglish});if(!rows.length)return null;
  const en=language==='en';
  return <section className="comment-quotes" aria-label={en?'Actual sampled comments':'实际采样评论'}>
   <div className="comment-quotes-heading"><strong>{en?'IN THEIR WORDS':'用户怎么说'}</strong><span>{en?'Selected comments':'评论摘选'}</span></div>
