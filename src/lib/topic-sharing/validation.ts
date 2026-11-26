@@ -1,8 +1,17 @@
 import {numericalFacts,type NumericalFacts} from '../translation-facts';
 import {eligibleColumns,usableTopicQuotes} from './recommendation';
 import type {EditorialColumn,LocalizedTopicShare,TopicShareCopy,TopicShareLanguage,TopicShareSource} from './types';
+import {TOPIC_SHARE_CONTRACT,TOPIC_SHARE_POST_PATTERNS,topicShareFieldLimit} from './contract';
+export {TOPIC_SHARE_POST_PATTERNS} from './contract';
 
-export const TOPIC_SHARE_POST_PATTERNS=['specific_observation','source_voice','number_context','bounded_counterpoint','culture_translation','sourced_update','context','uncertainty'] as const;
+export type TopicShareCopyIssue={path:string;code:'missing_text'|'length'|'language'|'duplicate_text'|'pattern'|'selection'|'population'|'quotation';message:string};
+export type TopicShareRepairIssue=TopicShareCopyIssue|(TopicShareNumericIssue&{code:'numerical'})|(TopicShareCommentIssue&{code:'comment_evidence'});
+export class TopicShareCopyError extends Error {
+ constructor(readonly issues:TopicShareRepairIssue[]){
+  super(`Topic share copy validation: ${issues.slice(0,12).map(issue=>`${issue.path} [${issue.code}]${'message' in issue?': '+issue.message:''}`).join('; ')}`);
+  this.name='TopicShareCopyError';
+ }
+}
 
 function object(value:unknown,path:string):Record<string,unknown>{
  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error(`Missing object: ${path}`);
@@ -13,42 +22,43 @@ function fields(value:Record<string,unknown>,allowed:readonly string[],path:stri
 }
 const chars=(text:string)=>Array.from(text).length;
 const words=(text:string)=>text.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu)?.length??0;
-function text(value:unknown,path:string,max:number,language?:TopicShareLanguage,maxWords?:number):string {
- if(typeof value!=='string'||!value.trim())throw new Error(`Missing text: ${path}`);
+function text(value:unknown,path:string,max:number,language?:TopicShareLanguage,maxWords?:number,issues?:TopicShareCopyIssue[]):string {
+ if(typeof value!=='string')throw new Error(`Missing text: ${path}`);
  const clean=value.trim();
  if(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u.test(clean))throw new Error(`Unsafe control character: ${path}`);
- if(chars(clean)>max||(maxWords!==undefined&&words(clean)>maxWords))throw new Error(`Text length exceeds limit${maxWords!==undefined?' in words':''}: ${path}`);
- if(language==='en'&&(/\p{Script=Han}/u.test(clean)||!/[a-z]/i.test(clean)))throw new Error(`Incomplete English or Han text: ${path}`);
- if(language==='zh'&&!/\p{Script=Han}/u.test(clean))throw new Error(`Missing independently localized Chinese: ${path}`);
+ const report=(code:TopicShareCopyIssue['code'],message:string)=>{if(issues)issues.push({path,code,message});else throw new Error(`${message}: ${path}`);};
+ if(!clean)report('missing_text','Missing text');
+ if(chars(clean)>max||(maxWords!==undefined&&words(clean)>maxWords))report('length',`Text length exceeds limit${maxWords!==undefined?' in words':''}`);
+ if(language==='en'&&(/\p{Script=Han}/u.test(clean)||!/[a-z]/i.test(clean)))report('language','Incomplete English or Han text');
+ if(language==='zh'&&!/\p{Script=Han}/u.test(clean))report('language','Missing independently localized Chinese');
  return clean;
 }
-function localized(value:unknown,language:TopicShareLanguage):LocalizedTopicShare {
- const data=object(value,language),en=language==='en';
+function localized(value:unknown,language:TopicShareLanguage,issues:TopicShareCopyIssue[]):LocalizedTopicShare {
+ const data=object(value,language);
+ const checked=(value:unknown,path:string)=>{const limit=topicShareFieldLimit(path);return text(value,path,limit.maxChars,limit.language,limit.maxWords,issues);};
  fields(data,['headline','hook','summary','context','whyItMatters','question','posts','selectedPostId','replies','altText'],language);
- if(!Array.isArray(data.posts)||data.posts.length!==3)throw new Error(`Exactly three post candidates required: ${language}.posts`);
+ if(!Array.isArray(data.posts)||data.posts.length!==TOPIC_SHARE_CONTRACT.postCount)throw new Error(`Exactly three post candidates required: ${language}.posts`);
  const ids=new Set<string>(),bodies=new Set<string>(),patterns=new Set<string>();
  const posts=data.posts.map((value,index)=>{
   const path=`${language}.posts[${index}]`,post=object(value,path);
   fields(post,['id','pattern','text','reason'],path);
-  const id=text(post.id,path+'.id',80),pattern=text(post.pattern,path+'.pattern',80),body=text(post.text,path+'.text',en?280:140,language);
-  if(!/^[a-zA-Z0-9_-]+$/.test(id)||!(TOPIC_SHARE_POST_PATTERNS as readonly string[]).includes(pattern))throw new Error(`Invalid post candidate id or pattern: ${path}`);
+  const id=text(post.id,path+'.id',80),pattern=checked(post.pattern,path+'.pattern'),body=checked(post.text,path+'.text');
+  if(!/^[a-zA-Z0-9_-]+$/.test(id)||ids.has(id))throw new Error(`Invalid or duplicate post candidate id: ${path}`);
+  if(!(TOPIC_SHARE_POST_PATTERNS as readonly string[]).includes(pattern)||patterns.has(pattern))issues.push({path:path+'.pattern',code:'pattern',message:'Invalid or duplicate post candidate pattern'});
   const normalized=body.normalize('NFKC').replace(/[\p{P}\p{Z}\s]/gu,'').toLocaleLowerCase();
-  if(ids.has(id)||bodies.has(normalized)||patterns.has(pattern))throw new Error(`Duplicate post candidate id, text or pattern: ${path}`);
+  if(bodies.has(normalized))issues.push({path:path+'.text',code:'duplicate_text',message:'Duplicate post candidate text'});
   ids.add(id);bodies.add(normalized);patterns.add(pattern);
-  return {id,pattern,text:body,reason:text(post.reason,path+'.reason',400)};
+  return {id,pattern,text:body,reason:checked(post.reason,path+'.reason')};
  });
- const selectedPostId=text(data.selectedPostId,language+'.selectedPostId',80);
- if(!ids.has(selectedPostId))throw new Error(`Unknown selected post candidate: ${language}.selectedPostId`);
- if(!Array.isArray(data.replies)||data.replies.length>4)throw new Error(`Reply count exceeds limit: ${language}.replies`);
+ const selectedPostId=checked(data.selectedPostId,language+'.selectedPostId');
+ if(!ids.has(selectedPostId))issues.push({path:language+'.selectedPostId',code:'selection',message:'Unknown selected post candidate'});
+ if(!Array.isArray(data.replies)||data.replies.length>TOPIC_SHARE_CONTRACT.maxReplies)throw new Error(`Reply count exceeds limit: ${language}.replies`);
  return {
-  headline:text(data.headline,language+'.headline',en?200:45,language,en?18:undefined),
-  hook:text(data.hook,language+'.hook',en?280:140,language),
-  summary:text(data.summary,language+'.summary',en?1200:200,language,en?70:undefined),
-  context:text(data.context,language+'.context',en?1200:220,language,en?70:undefined),
-  whyItMatters:text(data.whyItMatters,language+'.whyItMatters',en?800:150,language,en?45:undefined),
-  question:text(data.question,language+'.question',en?280:140,language),
-  posts,selectedPostId,replies:data.replies.map((reply,index)=>text(reply,`${language}.replies[${index}]`,1000,language)),
-  altText:text(data.altText,language+'.altText',1000,language)
+  headline:checked(data.headline,language+'.headline'),hook:checked(data.hook,language+'.hook'),
+  summary:checked(data.summary,language+'.summary'),context:checked(data.context,language+'.context'),
+  whyItMatters:checked(data.whyItMatters,language+'.whyItMatters'),question:checked(data.question,language+'.question'),
+  posts,selectedPostId,replies:data.replies.map((reply,index)=>checked(reply,`${language}.replies[${index}]`)),
+  altText:checked(data.altText,language+'.altText')
  };
 }
 function visibleTexts(copy:LocalizedTopicShare,language:TopicShareLanguage):Array<{path:string;body:string}>{
@@ -75,6 +85,15 @@ export class TopicShareNumericalError extends Error {
   this.name='TopicShareNumericalError';
  }
 }
+/** All editable content failures share one repair protocol. Security/schema errors do not. */
+export function topicShareRepairIssues(error:unknown):TopicShareRepairIssue[]|undefined {
+ if(error instanceof TopicShareCopyError)return error.issues;
+ if(error instanceof TopicShareNumericalError)return error.issues.map(issue=>({...issue,code:'numerical'}));
+ if(error instanceof TopicShareCommentError)return [
+  ...error.numericalIssues.map(issue=>({...issue,code:'numerical' as const})),
+  ...error.issues.map(issue=>({...issue,code:'comment_evidence' as const}))
+ ];
+}
 function unsupportedNumbers(source:NumericalFacts,target:NumericalFacts):NumericalFacts|undefined {
  const roles=Object.fromEntries(Object.entries(target.roles).map(([role,values])=>[role,missingFacts(source.roles[role]??[],values)]).filter(([,values])=>values.length));
  const result={numbers:missingFacts(source.numbers,target.numbers),ratios:missingFacts(source.ratios,target.ratios,value=>JSON.stringify(value)),seasons:missingFacts(source.seasons,target.seasons),dates:missingFacts(source.dates,target.dates),roles};
@@ -92,6 +111,9 @@ function copyNumericalFacts(text:string):NumericalFacts {
   .replace(new RegExp(`\\b(\\d[\\d,.]*|${cardinal}|${magnitude})${hyphen}(?=(?:${magnitude})\\b)`,'gi'),'$1 ')
   .replace(new RegExp(`\\b(${magnitude})${hyphen}(?=[a-z])`,'gi'),'$1 ');
  return numericalFacts(normalized);
+}
+export function topicShareNumericalEvidence(source:TopicShareSource):NumericalFacts {
+ return copyNumericalFacts(sourceFacts(source));
 }
 function unsupportedCommentClaim(body:string):boolean {
  const audience='(?:commenters?|viewers?|users?|fans?|readers?|netizens?)';
@@ -134,16 +156,17 @@ export function validateTopicShareCopy(value:unknown,source:TopicShareSource):To
  const generatedAt=text(data.generatedAt,'generatedAt',40),model=text(data.model,'model',200);
  if(!/^\d{4}-\d{2}-\d{2}T/.test(generatedAt)||!Number.isFinite(Date.parse(generatedAt)))throw new Error('Invalid generatedAt');
  if(!eligibleColumns(source).includes(data.column as EditorialColumn))throw new Error('Editorial column unavailable for this source and comment evidence');
- const column=data.column as EditorialColumn,en=localized(data.en,'en'),zh=localized(data.zh,'zh');
+ const copyIssues:TopicShareCopyIssue[]=[];
+ const column=data.column as EditorialColumn,en=localized(data.en,'en',copyIssues),zh=localized(data.zh,'zh',copyIssues);
  const facts=sourceFacts(source),allowedFacts=copyNumericalFacts(facts);
  const allowedLinks=new Set(source.links.map(link=>link.url));
  const numericalIssues:TopicShareNumericIssue[]=[];
  const commentIssues:TopicShareCommentIssue[]=[];
  for(const language of ['en','zh'] as const){
   const localizedCopy=language==='en'?en:zh,quotes=usableTopicQuotes(source,language);
-  for(const post of localizedCopy.posts){
-   if(post.pattern==='source_voice'&&!quotes.length)throw new Error('Source voice pattern requires saved comment evidence');
-   if(post.pattern==='number_context'&&!allowedFacts.numbers.length&&!allowedFacts.ratios.length)throw new Error('Number pattern requires source numerical evidence');
+  for(const [index,post] of localizedCopy.posts.entries()){
+   if(post.pattern==='source_voice'&&!quotes.length)copyIssues.push({path:`${language}.posts[${index}].pattern`,code:'pattern',message:'Source voice pattern requires saved comment evidence'});
+   if(post.pattern==='number_context'&&!allowedFacts.numbers.length&&!allowedFacts.ratios.length)copyIssues.push({path:`${language}.posts[${index}].pattern`,code:'pattern',message:'Number pattern requires source numerical evidence'});
   }
   for(const {path,body} of visibleTexts(localizedCopy,language)){
    for(const match of body.matchAll(/https?:\/\/[^\s<>"“”]+/giu)){
@@ -153,12 +176,15 @@ export function validateTopicShareCopy(value:unknown,source:TopicShareSource):To
    if(/(?:javascript|data|file):|(?:www\.)[^\s]+/i.test(body))throw new Error('Unapproved source link in generated copy');
    const unsupported=unsupportedNumbers(allowedFacts,copyNumericalFacts(body));
    if(unsupported)numericalIssues.push({path,unsupported});
-   if(/\b(?:most|all|every|half of|a majority of)\s+(?:Chinese\s+)?(?:users?|buyers?|people|consumers?|netizens?|citizens?)\b|(?:所有|全部|大多数|多数|全民|全国人民|全中国)(?:的)?(?:用户|消费者|买家|网民|人|都)|全(?:中国|国)都/i.test(body))throw new Error('Unsupported representative population claim');
+   if(/\b(?:most|all|every|half of|a majority of)\s+(?:Chinese\s+)?(?:users?|buyers?|people|consumers?|netizens?|citizens?)\b|(?:所有|全部|大多数|多数|全民|全国人民|全中国)(?:的)?(?:用户|消费者|买家|网民|人|都)|全(?:中国|国)都/i.test(body))copyIssues.push({path,code:'population',message:'Unsupported representative population claim'});
    const quotations=[...body.matchAll(/“([^”]+)”|「([^」]+)」|『([^』]+)』|"([^"\n]+)"|(?:^|\s)'([^'\n]+)'/gu)].map(match=>match.slice(1).find(Boolean)!);
-   if(quotations.some(quote=>column==='voices'||!facts.includes(quote)))throw new Error('Model quotations are not source-owned comment evidence');
+   if(quotations.some(quote=>column==='voices'||!facts.includes(quote)))copyIssues.push({path,code:'quotation',message:'Model quotations are not source-owned comment evidence'});
    if(!quotes.length&&unsupportedCommentClaim(body))commentIssues.push({path,reason:'missing_saved_comment_evidence'});
   }
  }
+ if(copyIssues.length)throw new TopicShareCopyError([...copyIssues,
+  ...numericalIssues.map(issue=>({...issue,code:'numerical' as const})),
+  ...commentIssues.map(issue=>({...issue,code:'comment_evidence' as const}))]);
  if(commentIssues.length)throw new TopicShareCommentError(commentIssues,numericalIssues);
  if(numericalIssues.length)throw new TopicShareNumericalError(numericalIssues);
  return {version:1,generatedAt,model,sourceFingerprint:data.sourceFingerprint,column,en,zh};

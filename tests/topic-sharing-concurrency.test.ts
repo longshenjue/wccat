@@ -33,5 +33,14 @@ test('late topic-share generation cannot overwrite edits, source changes or a ma
    maintenance.acquireMaintenance(ctx.getDb(),'topic-test');maintenance.advanceGeneration(ctx.getDb(),'topic-test');maintenance.releaseMaintenance(ctx.getDb(),'topic-test');return response();
   }}),/数据版本/);
   assert.equal(service.readTopicShare(first.id)!.revision,edited.revision);
+  // Candidate recomposition must pass through the same final optimistic write.
+  let candidateCalls=0;
+  await assert.rejects(service.generateSavedTopicShare(ref,{force:true,expectedRevision:edited.revision,fetch:async()=>{
+   if(++candidateCalls===1)return Response.json({choices:[{message:{content:JSON.stringify({column:'inside',en:{...copy.en,posts:copy.en.posts.map((post,i)=>i===2?{...post,text:'One scene explains this local story.'}:post)},zh:copy.zh})}}]});
+   service.saveTopicShareEdits(first.id,{...edited.copy,en:{...edited.copy.en,headline:'Latest manual save'}},edited.revision);
+   return Response.json({choices:[{message:{content:JSON.stringify({patches:[{path:'en.posts[2].text',text:'One scene explains this local story.'}]})}}]});
+  }}),/版本|更新/);
+  assert.equal(candidateCalls,2);
+  assert.equal(service.readTopicShare(first.id)!.copy.en.headline,'Latest manual save');
  }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;ctx.close();}
 });

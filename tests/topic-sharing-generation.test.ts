@@ -202,11 +202,16 @@ test('a failed comment repair cannot start a third request or replace an unrelat
  }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
 });
 
-test('quotation and comment failures together stop before repair instead of rewriting unsupported quotations',async()=>{
+test('unattributed quotation and comment failures share one repair without weakening the final evidence checks',async()=>{
  const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='topic-test-secret';
  try{
-  const initial=content();initial.en.context='The comments show support.';initial.en.summary='A commenter said “The plan is perfect.”';let calls=0;
-  await assert.rejects(generateTopicShare(source(),{fetch:async()=>{calls++;return response(initial);}}),/quot/i);
-  assert.equal(calls,1);
+  const original=content(),initial=structuredClone(original);initial.en.context='The comments show support.';initial.en.summary='A commenter said “The plan is perfect.”';let calls=0;
+  const result=await generateTopicShare(source(),{fetch:async(_url,options)=>{
+   if(++calls===1)return response(initial);
+   const payload=JSON.parse(JSON.parse(String(options?.body)).messages.at(-1).content);
+   assert.deepEqual(new Set(payload.issues.map((issue:{path:string})=>issue.path)),new Set(['en.context','en.summary']));
+   return response({patches:[{path:'en.context',text:original.en.context},{path:'en.summary',text:original.en.summary}]});
+  }});
+  assert.equal(calls,2);assert.deepEqual(result.en,original.en);assert.deepEqual(result.zh,original.zh);
  }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
 });
