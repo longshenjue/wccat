@@ -1,3 +1,5 @@
+import {newsFactKey} from './news-facts';
+
 const stopWords = [
   "如何看待",
   "怎么看",
@@ -19,7 +21,7 @@ export function normalizeTitle(title: string) {
 }
 
 export function topicIdFromTitle(title: string) {
-  const normalized = normalizeTitle(title);
+  const normalized = newsFactKey(title);
   let hash = 0;
 
   for (let index = 0; index < normalized.length; index += 1) {

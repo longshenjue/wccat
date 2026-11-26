@@ -1,24 +1,13 @@
 import {scorePlatformItems} from "./platform-ranking";
-import { normalizeTitle, titleSimilarity, topicIdFromTitle } from "./normalize";
+import { topicIdFromTitle } from "./normalize";
+import {groupNewsFacts,sameNewsFact} from './news-facts';
 import { inferSentiment } from "./sentiment";
 import type { AttentionSignal, RawHotItem, TopicGroup, TopicOccurrence } from "./types";
 import { summarizeTopic } from "./summary";
 
 export function buildTopicRanking(rawItems: RawHotItem[]): TopicGroup[] {
   const occurrences = scorePlatformItems(rawItems);
-  const buckets: TopicOccurrence[][] = [];
-
-  for (const occurrence of occurrences) {
-    const bucket = buckets.find((existing) =>
-      existing.some((candidate) => shouldMerge(candidate, occurrence))
-    );
-
-    if (bucket) {
-      bucket.push(occurrence);
-    } else {
-      buckets.push([occurrence]);
-    }
-  }
+  const buckets=groupNewsFacts(occurrences,item=>item.title);
 
   return buckets
     .map(toTopicGroup)
@@ -46,18 +35,6 @@ export function applyRankSignals(topics: TopicGroup[], previousTopics: TopicGrou
     }
     return { ...topic, signal: "steady" as AttentionSignal };
   });
-}
-
-function shouldMerge(left: TopicOccurrence, right: TopicOccurrence) {
-  if (!left.normalizedTitle || !right.normalizedTitle) {
-    return false;
-  }
-
-  if (left.normalizedTitle === right.normalizedTitle) {
-    return true;
-  }
-
-  return titleSimilarity(left.title, right.title) >= 0.42;
 }
 
 function toTopicGroup(occurrences: TopicOccurrence[]): TopicGroup {
@@ -110,14 +87,7 @@ function findPreviousTopic(topic: TopicGroup, previousTopics: TopicGroup[]) {
     return byId;
   }
 
-  const byNormalizedTitle = previousTopics.find(
-    (previous) => previous.normalizedTitle && previous.normalizedTitle === topic.normalizedTitle
-  );
-  if (byNormalizedTitle) {
-    return byNormalizedTitle;
-  }
-
-  return previousTopics.find((previous) => titleSimilarity(previous.title, topic.title) >= 0.55);
+  return previousTopics.find(previous=>sameNewsFact(previous.title,topic.title));
 }
 
 /** One bounded contribution per platform, including when several posts describe the same topic. */

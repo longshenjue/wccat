@@ -8,7 +8,9 @@ import {
   saveTopicAnalysisEvidenceToDb,
   writeGeneration
 } from "./db";
-import { normalizeTitle } from "./normalize";
+import {groupNewsFacts,newsFactKey} from './news-facts';
+import {topicIdFromTitle} from './normalize';
+import {summarizeTopic} from './summary';
 import { readDailyReportInput } from "./daily-report-input";
 import { translateDailyShare } from "./daily-share-translation";
 import type { DailyShareCopy } from "./daily-share-copy";
@@ -17,14 +19,14 @@ import {savePreparedShareEnImages} from './sharing';
 import {restoreGeneratedImages} from './shareen-image-state';
 import {generateShareEn} from "./shareen";
 import {saveSharingFields} from "./shareen-persistence";
-import { sentimentLabel } from "./sentiment";
+import { inferSentiment, sentimentLabel } from "./sentiment";
 import { analyzeTopicWithDeepSeek, type TopicAnalysis } from "./topic-analysis";
 import { fetchArticleContexts } from "./fulltext";
 import {enrichTopicComments} from './comments/runtime';
 import {buildFallbackTopicAnalysis} from './topic-analysis';
 import { redactJobMessage } from "./log-redaction";
 import type { DailySnapshot, Sentiment, TopicGroup, TopicOccurrence } from "./types";
-import {dailyCoverageSlot,dailyPlatformRank,dailyRankingEvidence,selectDailyCandidates,type DailyRankingEvidence,type DailyRankingObservation} from './daily-ranking';
+import {dailyCoverageSlot,dailyFactPeaks,dailyPlatformRank,dailyRankingEvidence,selectDailyCandidates,type DailyRankingEvidence,type DailyRankingObservation} from './daily-ranking';
 import {getSourceById} from './sources';
 import {platformItemKey,scorePlatformItems} from './platform-ranking';
 
@@ -88,6 +90,7 @@ type TopicBucket = {
   peakRank: number;
   peakSnapshotDate?: string;
   peakTopicId?: string;
+  latestSignal: TopicGroup['signal'];
 };
 
 type GeneratedDrafts = Pick<WccatDailyReport, "headline" | "overview" | "wechatDraft" | "videoScript" | "model">;
@@ -185,7 +188,7 @@ export function getDailyReport(reportDate?: string) {
 }
 
 export function buildDailyTopTopics(snapshots: DailySnapshot[],analysisReader=readTopicAnalysesForDate) {
-  const buckets = new Map<string, TopicBucket>();
+  const observations:Array<{snapshotDate:string;topic:TopicGroup;occurrence:TopicOccurrence;analysisEligible:boolean}>=[];
   const snapshotDates = [...new Set(snapshots.map(snapshot => snapshot.date))].sort();
   // Normalize persistence weighting for hourly legacy data and four-hour samples.
   // This is a ranking weight, never an assertion of continuous elapsed activity.
@@ -208,50 +211,59 @@ export function buildDailyTopTopics(snapshots: DailySnapshot[],analysisReader=re
       slots.add(dailyCoverageSlot(snapshot.date));availableBySource.set(item.sourceId,slots);
     }
     for (const topic of snapshot.topics) {
-      const key = normalizeTitle(topic.normalizedTitle || topic.title);
-      if(!key)continue;
-      const bucket =
-        buckets.get(key) ??
-        ({
-          key,
-          title: topic.title,
-          sentiment: topic.sentiment,
-          topics: [],
-          occurrences: [],
-          snapshotDates: new Set<string>(),
-          rankingObservations: [],
-          categories: new Set<string>(),
-          peakHeatScore: 0,
-          peakRank: Number.POSITIVE_INFINITY,
-          peakSnapshotDate: undefined,
-          peakTopicId: undefined
-        } satisfies TopicBucket);
-
-      bucket.topics.push(topic);
-      bucket.occurrences.push(...topic.occurrences);
-      bucket.snapshotDates.add(snapshot.date);
+      // Old hourly fuzzy groups may contain more than one development. A saved
+      // analysis is reusable only when its entire source group is one fact.
+      const analysisEligible=groupNewsFacts([topic.title,...topic.occurrences.map(item=>item.title)],title=>title).length===1;
       for(const occurrence of topic.occurrences){
         const platformScoring=scoringByKey.get(platformItemKey(occurrence));
-        if(!platformScoring||dailyPlatformRank(occurrence)===undefined)continue;
-        bucket.rankingObservations.push({snapshotDate:snapshot.date,occurrence:{...occurrence,platformScoring,platformScore:platformScoring.cap*platformScoring.strength}});
+        if(!newsFactKey(occurrence.title)||!platformScoring||dailyPlatformRank(occurrence)===undefined)continue;
+        observations.push({snapshotDate:snapshot.date,topic,analysisEligible,
+          occurrence:{...occurrence,platformScoring,platformScore:platformScoring.cap*platformScoring.strength}});
       }
-      topic.categories.forEach((category) => bucket.categories.add(category));
-      bucket.peakHeatScore = Math.max(bucket.peakHeatScore, topic.heatScore);
-      bucket.peakRank = Math.min(bucket.peakRank, topic.rank);
-      if (topic.heatScore >= bucket.peakHeatScore) {
-        bucket.title = topic.title;
-        bucket.sentiment = topic.sentiment;
-        bucket.peakSnapshotDate = snapshot.date;
-        bucket.peakTopicId = topic.id;
-      }
-
-      buckets.set(key, bucket);
     }
   }
 
+  // Deduplicate the full saved pool BEFORE sorting or taking Top10. Scores are
+  // rebuilt from united observations, never by adding duplicate topic scores.
+  const factGroups=groupNewsFacts(observations,value=>value.occurrence.title);
+  const peaks=dailyFactPeaks(factGroups);
   const analysisCache = new Map<string, ReturnType<typeof readTopicAnalysesForDate>>();
+  const savedAnalysis=(date:string,id:string)=>{
+    if(!analysisCache.has(date))analysisCache.set(date,analysisReader(date));
+    return analysisCache.get(date)?.[id];
+  };
+  const buckets=factGroups.map((group,index)=>{
+    const finalTitles=[...new Set(group.map(value=>value.occurrence.title))];
+    const eligibility=new Map<TopicGroup,boolean>();
+    const candidates=group.map(value=>{
+      // A locally coherent parent can still conflict with a singular authority
+      // in the final group after a generic bridge was assigned elsewhere.
+      if(!eligibility.has(value.topic))eligibility.set(value.topic,value.analysisEligible&&
+        groupNewsFacts([...new Set([...finalTitles,value.topic.title,...value.topic.occurrences.map(item=>item.title)])],title=>title).length===1);
+      const analysisEligible=eligibility.get(value.topic)!;
+      const analysis=analysisEligible?savedAnalysis(value.snapshotDate,value.topic.id):undefined;
+      return {...value,analysisEligible,analysisPriority:analysisEligible?(analysis&&analysis.model!=='local-rules'?2:1):0};
+    });
+    const lead=candidates.reduce((best,value)=>
+      value.analysisPriority>best.analysisPriority||
+      (value.analysisPriority===best.analysisPriority&&value.occurrence.platformScore>=best.occurrence.platformScore)?value:best);
+    // An archived generic lead may describe several split groups. Always name a
+    // group from an occurrence it actually contains, not that ambiguous lead.
+    const title=lead.occurrence.title;
+    const occurrences=group.map(value=>value.occurrence);
+    const representative=lead.analysisEligible?lead.topic:{...lead.topic,title,summary:summarizeTopic(title,occurrences)};
+    return {
+      key:topicIdFromTitle(title),title,sentiment:inferSentiment(occurrences.map(item=>item.title).join(' ')),topics:[representative],occurrences,
+      snapshotDates:new Set(group.map(value=>value.snapshotDate)),
+      rankingObservations:group.map(({snapshotDate,occurrence})=>({snapshotDate,occurrence})),
+      categories:new Set(occurrences.map(value=>value.sourceCategory)),
+      ...peaks[index],
+      peakSnapshotDate:lead.analysisEligible?lead.snapshotDate:undefined,
+      peakTopicId:lead.analysisEligible?lead.topic.id:undefined
+    } satisfies TopicBucket;
+  });
 
-  return selectDailyCandidates([...buckets.values()]
+  return selectDailyCandidates(buckets
     .map(bucket => toDailyReportTopic(bucket, snapshotDates.length, sampleWeight,totalSlots,availableBySource))
     .filter((topic):topic is DailyReportTopic=>topic!==null))
     .map((topic) => attachTopicAnalysis(topic, analysisCache,analysisReader))
@@ -466,7 +478,7 @@ function inferDailySignal(bucket: TopicBucket, sampleWeight: number): DailyRepor
   if (bucket.snapshotDates.size * sampleWeight >= 8 && bucket.peakRank <= 5) {
     return "dominant";
   }
-  if (bucket.topics.at(-1)?.signal === "rising" || bucket.topics.at(-1)?.signal === "new") {
+  if (bucket.latestSignal === "rising" || bucket.latestSignal === "new") {
     return "rising";
   }
 

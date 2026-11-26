@@ -1,5 +1,5 @@
 import {platformPolicy,platformRank} from './platform-ranking';
-import type {PlatformTier,TopicOccurrence} from './types';
+import type {AttentionSignal,PlatformTier,TopicOccurrence} from './types';
 
 // Retain the shape of unshipped/local v2 reports that may already have been saved.
 type LegacyDailyRankingEvidence={policy:'cross-platform-v2';basis:'cross-platform'|'single-platform-hotlist';platforms:string[];coveredSlots:number;totalSlots:number;spreadScore:number;coverageScore:number;prominenceScore:number};
@@ -8,6 +8,30 @@ export type TierDailyRankingEvidence={policy:'platform-tier-v3';basis:'cross-pla
 export type DailyRankingEvidence=LegacyDailyRankingEvidence|TierDailyRankingEvidence;
 export type DailyRankingObservation={snapshotDate:string;occurrence:TopicOccurrence};
 export const dailyPlatformRank=platformRank;
+
+/** Reconstruct snapshot peaks from the final facts, not a mixed archived parent. */
+export function dailyFactPeaks(groups:readonly (readonly DailyRankingObservation[])[]):Array<{peakRank:number;peakHeatScore:number;latestSignal:AttentionSignal}> {
+ const captures=groups.map(group=>{
+  const dates=new Map<string,Map<string,number>>();
+  for(const {snapshotDate,occurrence} of group){
+   const sources=dates.get(snapshotDate)??new Map<string,number>();
+   sources.set(occurrence.sourceId,Math.max(sources.get(occurrence.sourceId)??0,occurrence.platformScore));dates.set(snapshotDate,sources);
+  }
+  return new Map([...dates].map(([date,sources])=>[date,Math.round([...sources.values()].reduce((sum,value)=>sum+value,0))]));
+ });
+ const ranks=groups.map(()=>new Map<string,number>()),dates=new Set(captures.flatMap(values=>[...values.keys()]));
+ for(const date of dates){
+  captures.map((values,id)=>({id,score:values.get(date)})).filter((value):value is {id:number;score:number}=>value.score!==undefined)
+   .sort((a,b)=>b.score-a.score).forEach((value,index)=>ranks[value.id].set(date,index+1));
+ }
+ return captures.map((values,id)=>{
+  const ordered=[...ranks[id]].sort(([a],[b])=>a.localeCompare(b));
+  const latest=ordered.at(-1)?.[1],previous=ordered.at(-2)?.[1];
+  // One observation proves no movement; keep the existing daily long-tail rule.
+  const latestSignal:AttentionSignal=previous===undefined?'steady':previous-latest!>=2?'rising':latest!-previous>=2?'cooling':'steady';
+  return {peakHeatScore:Math.max(...values.values()),peakRank:Math.min(...ranks[id].values()),latestSignal};
+ });
+}
 
 /** Manual refreshes within a scheduled block cannot multiply persistence. */
 export function dailyCoverageSlot(snapshotDate:string):string {

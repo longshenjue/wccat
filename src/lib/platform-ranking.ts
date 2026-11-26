@@ -1,4 +1,5 @@
 import {normalizeTitle} from './normalize';
+import {newsFactKey} from './news-facts';
 import type {EngagementStats,PlatformScoreEvidence,PlatformTier,RawHotItem,TopicOccurrence} from './types';
 
 /** Product parameters, not measured audience counts. See docs/daily-ranking.md for evidence. */
@@ -23,7 +24,7 @@ export function platformPolicy(sourceId:string) {
 
 /** Provider names and alternate URLs do not turn a source topic into several observations. */
 export function platformItemKey(item:Pick<RawHotItem,'sourceId'|'title'|'url'>):string {
- return `${item.sourceId}:${normalizeTitle(item.title)||item.url}`;
+ return `${item.sourceId}:${newsFactKey(item.title)||item.url}`;
 }
 
 export function platformRank(item:Pick<RawHotItem,'sourceId'|'rank'>):number|undefined {
