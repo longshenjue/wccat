@@ -15,20 +15,45 @@ export class TopicShareCopyError extends Error {
  }
 }
 
+/** Model-owned copy shape can be repaired; provenance and unsafe content cannot. */
+export class TopicShareStructureError extends Error {
+ constructor(message:string){super(message);this.name='TopicShareStructureError';}
+}
+const sourceOwnedFields=new Set(['version','generatedAt','model','sourceFingerprint','fingerprint','baseFingerprint','sourceKey','ref','source','sources','sourceId','sourceName','links','url','analysis','commentExamples','readerComments','research','photo','cover','imageAsset','dataBase64','assetWarnings','editorialPolicy','reviewWarnings','revision']);
+const unsafeControls=/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u;
+
+/** Inspect the entire model response before a recoverable shape failure can mask a hard error. */
+export function assertTopicShareModelBoundary(value:unknown,path='TopicShare'):void {
+ if(typeof value==='string'){
+  if(unsafeControls.test(value))throw new Error(`Unsafe control character: ${path}`);
+ }else if(Array.isArray(value)){
+  value.forEach((item,index)=>assertTopicShareModelBoundary(item,`${path}[${index}]`));
+ }else if(value&&typeof value==='object'){
+  for(const [key,item] of Object.entries(value)){
+   if(unsafeControls.test(key))throw new Error('Unsafe control character in model field name');
+   if(sourceOwnedFields.has(key))throw new Error(`Unexpected source-owned or unknown field: ${path}.${key}`);
+   assertTopicShareModelBoundary(item,`${path}.${key}`);
+  }
+ }
+}
+
 function object(value:unknown,path:string):Record<string,unknown>{
- if(!value||typeof value!=='object'||Array.isArray(value))throw new Error(`Missing object: ${path}`);
+ if(!value||typeof value!=='object'||Array.isArray(value))throw new TopicShareStructureError(`Missing object: ${path}`);
  return value as Record<string,unknown>;
 }
 function fields(value:Record<string,unknown>,allowed:readonly string[],path:string){
- for(const key of Object.keys(value))if(!allowed.includes(key))throw new Error(`Unexpected source-owned or unknown field: ${path}.${key}`);
+ const unexpected=Object.keys(value).filter(key=>!allowed.includes(key));
+ const sourceOwned=unexpected.find(key=>sourceOwnedFields.has(key));
+ if(sourceOwned)throw new Error(`Unexpected source-owned or unknown field: ${path}.${sourceOwned}`);
+ if(unexpected.length)throw new TopicShareStructureError(`Unexpected source-owned or unknown field: ${path}.${unexpected[0]}`);
 }
 const chars=(text:string)=>Array.from(text).length;
 const words=(text:string)=>text.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu)?.length??0;
 function text(value:unknown,path:string,max:number,language?:TopicShareLanguage,maxWords?:number,issues?:TopicShareCopyIssue[]):string {
  if(issues&&(value===undefined||value===null))value='';
- if(typeof value!=='string')throw new Error(`Missing text: ${path}`);
+ if(typeof value!=='string')throw new TopicShareStructureError(`Missing text: ${path}`);
  const clean=value.trim();
- if(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u.test(clean))throw new Error(`Unsafe control character: ${path}`);
+ if(unsafeControls.test(clean))throw new Error(`Unsafe control character: ${path}`);
  const report=(code:TopicShareCopyIssue['code'],message:string)=>{if(issues)issues.push({path,code,message});else throw new Error(`${message}: ${path}`);};
  if(!clean)report('missing_text','Missing text');
  if(chars(clean)>max||(maxWords!==undefined&&words(clean)>maxWords))report('length',`Text length exceeds limit${maxWords!==undefined?' in words':''}`);
@@ -47,14 +72,14 @@ function localized(value:unknown,language:TopicShareLanguage,issues:TopicShareCo
  if(data.article!==undefined){const row=object(data.article,language+'.article');fields(row,['title','body'],language+'.article');article={title:checked(row.title,language+'.article.title'),body:checked(row.body,language+'.article.body')};}
  else if(newsStyle)issues.push({path:language+'.article',code:'missing_text',message:'Companion article is missing; the cover draft is preserved'});
  if(data.posts===undefined||Array.isArray(data.posts)&&!data.posts.length)data.posts=[{id:`draft-${language}`,pattern:'context',text:'',reason:''}];
- if(!Array.isArray(data.posts))throw new Error(`Invalid post candidates: ${language}.posts`);
+ if(!Array.isArray(data.posts))throw new TopicShareStructureError(`Invalid post candidates: ${language}.posts`);
  if(data.posts.length!==TOPIC_SHARE_CONTRACT.postCount)issues.push({path:language+'.posts',code:'candidate_count',message:'Expected three post candidates'});
  const ids=new Set<string>(),bodies=new Set<string>(),patterns=new Set<string>();
  const posts=data.posts.map((value,index)=>{
   const path=`${language}.posts[${index}]`,post=object(value,path);
   fields(post,['id','pattern','text','reason'],path);
   const id=text(post.id,path+'.id',80),pattern=checked(post.pattern,path+'.pattern'),body=checked(post.text,path+'.text');
-  if(!/^[a-zA-Z0-9_-]+$/.test(id)||ids.has(id))throw new Error(`Invalid or duplicate post candidate id: ${path}`);
+  if(!/^[a-zA-Z0-9_-]+$/.test(id)||ids.has(id))throw new TopicShareStructureError(`Invalid or duplicate post candidate id: ${path}`);
   if(!(TOPIC_SHARE_POST_PATTERNS as readonly string[]).includes(pattern)||patterns.has(pattern))issues.push({path:path+'.pattern',code:'pattern',message:'Invalid or duplicate post candidate pattern'});
   const normalized=body.normalize('NFKC').replace(/[\p{P}\p{Z}\s]/gu,'').toLocaleLowerCase();
   if(bodies.has(normalized))issues.push({path:path+'.text',code:'duplicate_text',message:'Duplicate post candidate text'});
@@ -64,7 +89,7 @@ function localized(value:unknown,language:TopicShareLanguage,issues:TopicShareCo
  const selectedPostId=checked(data.selectedPostId,language+'.selectedPostId');
  if(!ids.has(selectedPostId))issues.push({path:language+'.selectedPostId',code:'selection',message:'Unknown selected post candidate'});
  if(data.replies===undefined||data.replies===null)data.replies=[];
- if(!Array.isArray(data.replies))throw new Error(`Invalid replies: ${language}.replies`);
+ if(!Array.isArray(data.replies))throw new TopicShareStructureError(`Invalid replies: ${language}.replies`);
  if(data.replies.length>TOPIC_SHARE_CONTRACT.maxReplies)issues.push({path:language+'.replies',code:'reply_count',message:'Reply count exceeds suggested limit'});
  return {
   headline:checked(data.headline,language+'.headline'),hook:optional('hook'),

@@ -1,9 +1,9 @@
-import {newsroomPrompt,newsroomJsonRepairPrompt} from '../newsroom/prompts';
+import {newsroomPrompt,newsroomJsonRepairPrompt,newsroomStructureRepairPrompt} from '../newsroom/prompts';
 import {cleanGeneratedNewsValue} from '../newsroom/prose';
 import {topicReaderComments} from './readers';
 import {parseShareEnJson} from '../shareen-json';
 import {eligibleColumns,recommendTopic,usableTopicQuotes} from './recommendation';
-import {prepareTopicShareDraft,topicShareNumericalEvidence} from './validation';
+import {prepareTopicShareDraft,topicShareNumericalEvidence,TopicShareStructureError,assertTopicShareModelBoundary} from './validation';
 import {TOPIC_SHARE_POST_PATTERNS,TOPIC_NEWS_POLICY} from './contract';
 import {EDITORIAL_COLUMNS} from './columns';
 import type {EditorialColumn,TopicShareCopy,TopicShareSource} from './types';
@@ -16,7 +16,7 @@ const briefs:Record<EditorialColumn,string>={
 };
 const system=newsroomPrompt('topic');
 class JsonEnvelopeError extends SyntaxError {constructor(readonly content:string){super('Model returned malformed JSON');}}
-/** One model request produces an editable draft; editorial checks are admin warnings only. */
+/** One draft request plus at most one protocol/structure repair; editorial checks only warn. */
 export async function generateTopicShare(source:TopicShareSource,options:GenerationOptions={}):Promise<TopicShareCopy>{
  const frozen=structuredClone(source),column=options.column??recommendTopic(frozen).column;
  if(!EDITORIAL_COLUMNS.some(item=>item.id===column))throw new Error('Unknown editorial column');
@@ -49,18 +49,33 @@ export async function generateTopicShare(source:TopicShareSource,options:Generat
  };
  try{
   let data:unknown;
+  let recoveryUsed=false;
   try{data=await request([{role:'system',content:system},{role:'user',content:JSON.stringify(payload)}],9000);}
   catch(error){
    if(!(error instanceof JsonEnvelopeError))throw error;
+   recoveryUsed=true;
    options.log?.('warn','模型响应 JSON 格式异常，正在仅修复一次序列化格式；不执行翻译或措辞重审。');
    data=await request([{role:'system',content:newsroomJsonRepairPrompt},{role:'user',content:JSON.stringify({invalidJson:error.content})}],9000,0);
   }
-  if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('DeepSeek topic share content is not a JSON object');
-  const draft=cleanGeneratedNewsValue(data) as Record<string,unknown>;
-  if(Object.keys(draft).some(key=>!['column','en','zh'].includes(key)))throw new Error('DeepSeek topic share returned unexpected source-owned or metadata fields');
-  if(draft.column!==undefined&&draft.column!==column)options.log?.('warn','模型返回的栏目与所选栏目不同，已保留管理员选择的栏目及生成文字。');
-  const metadata={version:1,generatedAt:new Date((options.now??Date.now)()).toISOString(),model,sourceFingerprint:frozen.fingerprint,column,editorialPolicy:TOPIC_NEWS_POLICY};
-  const {copy,reviewWarnings}=prepareTopicShareDraft({...metadata,en:draft.en,zh:draft.zh},frozen);
+  const prepare=(value:unknown)=>{
+   assertTopicShareModelBoundary(value);
+   if(!value||typeof value!=='object'||Array.isArray(value))throw new TopicShareStructureError('DeepSeek topic share content is not a JSON object');
+   const draft=cleanGeneratedNewsValue(value) as Record<string,unknown>;
+   if(Object.keys(draft).some(key=>!['column','en','zh'].includes(key)))throw new Error('DeepSeek topic share returned unexpected source-owned or metadata fields');
+   const metadata={version:1,generatedAt:new Date((options.now??Date.now)()).toISOString(),model,sourceFingerprint:frozen.fingerprint,column,editorialPolicy:TOPIC_NEWS_POLICY};
+   return {...prepareTopicShareDraft({...metadata,en:draft.en,zh:draft.zh},frozen),column:draft.column};
+  };
+  let prepared:ReturnType<typeof prepare>;
+  try{prepared=prepare(data);}
+  catch(error){
+   if(!(error instanceof TopicShareStructureError)||recoveryUsed)throw error;
+   recoveryUsed=true;
+   options.log?.('warn','模型文案字段结构异常，正在仅修复一次结构；不执行翻译或措辞重审。');
+   data=await request([{role:'system',content:system+'\n\n'+newsroomStructureRepairPrompt},{role:'user',content:JSON.stringify({invalidDraft:data})}],9000,0);
+   prepared=prepare(data);
+  }
+  const {copy,reviewWarnings}=prepared;
+  if(prepared.column!==undefined&&prepared.column!==column)options.log?.('warn','模型返回的栏目与所选栏目不同，已保留管理员选择的栏目及生成文字。');
   if(reviewWarnings.length)options.log?.('warn',`草稿已保留，${reviewWarnings.length} 项编辑提示待人工核对：${reviewWarnings.map(item=>`${item.path} [${item.code}]`).join('; ')}`);
   options.log?.('info','Bilingual topic share draft generated; editorial decisions remain with the administrator.');
   return copy;

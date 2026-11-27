@@ -19,6 +19,13 @@ test('late topic-share generation cannot overwrite edits, source changes or a ma
    return new Response('provider unavailable',{status:503});
   }}),/HTTP 503/i);
   assert.equal(repairCalls,1);assert.deepEqual(service.readTopicShare(first.id),beforeRepair,'a failed provider request must preserve the exact saved draft and revision');
+  let structureCalls=0;
+  const invalidStructure=()=>Response.json({choices:[{message:{content:JSON.stringify({column:'inside',en:{...copy.en,article:{title:'Original article',body_zh:'A wrongly named English body.'}},zh:copy.zh})}}]});
+  await assert.rejects(service.generateSavedTopicShare(ref,{research:async source=>source,force:true,expectedRevision:first.revision,fetch:async()=>{
+   structureCalls++;return invalidStructure();
+  }}),/en\.article\.body_zh/);
+  assert.equal(structureCalls,2);
+  assert.deepEqual(service.readTopicShare(first.id),beforeRepair,'an exhausted structure recovery must preserve the exact saved draft and revision');
   const response=()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({column:'inside',en:copy.en,zh:copy.zh})}}]});
   await assert.rejects(service.generateSavedTopicShare(ref,{research:async source=>source,force:true,expectedRevision:first.revision,fetch:async()=>{
    service.saveTopicShareEdits(first.id,{...copy,en:{...copy.en,headline:'Newer manual edit'}},first.revision);return response();
@@ -42,5 +49,14 @@ test('late topic-share generation cannot overwrite edits, source changes or a ma
   }}),/版本|更新/);
   assert.equal(candidateCalls,1);
   assert.equal(service.readTopicShare(first.id)!.copy.en.headline,'Latest manual save');
+  const latest=service.readTopicShare(first.id)!;let recoveryCalls=0;
+  await assert.rejects(service.generateSavedTopicShare(ref,{research:async source=>source,force:true,expectedRevision:latest.revision,fetch:async()=>{
+   recoveryCalls++;
+   if(recoveryCalls===1)return invalidStructure();
+   service.saveTopicShareEdits(first.id,{...latest.copy,en:{...latest.copy.en,headline:'Edited during structure recovery'}},latest.revision);
+   return response();
+  }}),/版本|更新/);
+  assert.equal(recoveryCalls,2);
+  assert.equal(service.readTopicShare(first.id)!.copy.en.headline,'Edited during structure recovery');
  }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;ctx.close();}
 });
