@@ -39,7 +39,7 @@ function Story({image,text,language}:{image:ShareEnImage|undefined;text:string;l
  </div>;
 }
 
-function DebateStrip({battle,editorial=false,language}:{battle:ShareEnBattle;editorial?:boolean;language:ShareLanguage}) {
+export function DebateStrip({battle,editorial=false,language}:{battle:ShareEnBattle;editorial?:boolean;language:ShareLanguage}) {
  const en=language==='en';
  return <section className="shareen-debate" aria-label={en?'Emotional opposition':'情绪对抗'}>
   <div className="shareen-debate-heading"><h2>{en?'THE DEBATE':'讨论焦点'}</h2><span>{!en?'AI 来源分析 · 非民调':editorial?(battle.basis==='analysis'?'AI SOURCE ANALYSIS · NOT A POLL':'AI ESTIMATE · NOT A POLL'):(battle.basis==='analysis'?'SOURCE ANALYSIS':'AI ESTIMATE')}</span></div>
@@ -78,7 +78,7 @@ export function ShareEnPoster({report,copy:englishCopy,index,language='en',publi
     <h1>{highlight.hook}</h1>
     <Story key={image?.src??'no-image'} image={image} text={highlight.whatHappened} language={language}/>
     {battle?<DebateStrip battle={battle} editorial={editorial} language={language}/>:null}
-    {comments?<CommentQuotes {...comments} language={language}/>:null}
+    {comments||topic?.readerComments?.length?<CommentQuotes {...comments} observations={topic?.readerComments} language={language}/>:null}
     <section className="shareen-explainer shareen-why"><h2>{en?'WHY IT MATTERS':'为什么值得关注'}</h2><p>{highlight.whyItMatters}</p></section>
    </> : <>
     <div className="shareen-ranking-label"><span>{en?'THE TOP':'热点榜'} {copy.overview.topics.length}</span><span>{en?'ORIGINAL DAILY RANKING':'保留原始日榜顺序'}</span></div>

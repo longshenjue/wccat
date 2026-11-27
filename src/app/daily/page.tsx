@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DailyWorkbench } from "@/components/daily-workbench";
 import { getDailyReport } from "@/lib/daily-report";
+import {publicDailyReport} from '@/lib/newsroom/public-daily-report';
 import { listDailyReportDatesFromDb } from "@/lib/db";
 import "@/components/daily-archive.css";
 
@@ -61,7 +62,7 @@ export default async function DailyPage({ searchParams }: DailyPageProps) {
       </aside>
 
       {report ? (
-        <DailyWorkbench report={{...report,shareEnglish:undefined,shareEn:undefined}} />
+        <DailyWorkbench report={publicDailyReport(report)} />
       ) : (
         <section className="content">
           <section className="topbar daily-topbar">

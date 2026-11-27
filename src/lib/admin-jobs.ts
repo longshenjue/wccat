@@ -20,6 +20,7 @@ import {shareEnImagesReady} from './shareen-image-state';
 import type {SharingFormat} from './shareen-types';
 import {generateSharing,validateSharingTopic} from './sharing';
 import {generateSavedTopicShare,loadTopicShareSource,readTopicShare,parseTopicShareRef} from './topic-sharing/service';
+import {topicShareReadiness} from './topic-sharing/readiness';
 import {eligibleColumns} from './topic-sharing/recommendation';
 import type {TopicShareRef,EditorialColumn} from './topic-sharing/types';
 
@@ -155,7 +156,8 @@ export async function runJob(id:string){
    log('info','正在生成单话题英文与中文本地化分享');
    const record=await generateSavedTopicShare(input.topicRef!,{column:input.column,force:input.force,expectedRevision:input.expectedRevision,expectedSourceFingerprint:input.expectedSourceFingerprint,log});
    result={topicSharing:{id:record.id,title:record.source.title,column:record.copy.column,model:record.copy.model}};
-   log('info','双语分享稿已保存，可预览、编辑与下载');
+   const readiness=topicShareReadiness(record);
+   if(!readiness.ready){status='partial';log('warn',readiness.message);}else log('info','双语分享稿、配图和真实评论已保存，可预览、编辑与下载');
   }else if(input.kind==='daily'){
    let warnings=0;
    const log=(level:'info'|'warn'|'error',text:string)=>{
@@ -219,7 +221,7 @@ export async function runJob(id:string){
   }else{
    result={storage:await maintainStorage(input.kind,progress)};
   }
-  getDb().prepare('update admin_jobs set status=?,result=?,progress=?,updated_at=? where id=?').run(status,JSON.stringify(result),status==='partial'?(input.kind==='sharing'?'部分分享内容未就绪，请查看日志后重试':'中文日报已生成；英文、ShareEn 或部分 AI 内容未就绪，请查看日志'):'任务完成',Date.now(),id);
+  getDb().prepare('update admin_jobs set status=?,result=?,progress=?,updated_at=? where id=?').run(status,JSON.stringify(result),status==='partial'?(input.kind==='topic-sharing'?'文案已保存；新闻图片或真实评论等素材待补齐':input.kind==='sharing'?'部分分享内容未就绪，请查看日志后重试':'中文日报已生成；英文、ShareEn 或部分 AI 内容未就绪，请查看日志'):'任务完成',Date.now(),id);
  }catch(error){
   if(job.kind==='export')rmSync(jobExportDirectory(id),{recursive:true,force:true});
   const message=redactJobMessage(error instanceof Error?error.message:'任务失败。');

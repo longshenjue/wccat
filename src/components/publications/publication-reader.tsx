@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- Immutable source images are embedded as validated WebP bytes. */
 import Link from 'next/link';
 import type {Publication,PublicationLanguage} from '../../lib/publications/types';
 import {publicationReference} from '../../lib/publications/store';
@@ -15,6 +16,7 @@ export function PublicationReader({publication,language}:{publication:Publicatio
   <div className="publication-intro"><p className="publication-kicker">{en?'SOURCES & CONTEXT':'来源与背景'} · #{ref.reference}</p><h1>{articleTitle||data.titles[language]}</h1><p>{singleArticle?(en?'News, background and WcCAT’s take, with original sources.':'新闻、背景与 WcCAT 点评，附原始来源。'):en?'The context, original Chinese sources and individual comments behind this WcCAT post.':'这条 WcCAT 帖子的背景、中文原始来源与个人评论。'}</p><small>{en?'Edition':'内容所属日期'} · {data.date}</small></div>
   {data.kind==='daily'?<nav className="publication-contents" aria-label={en?'Daily stories':'日报话题'}><h2>{en?'In this edition':'本期话题'}</h2><ol>{data.cards.map(card=><li key={card.id}><a href={`#${card.id}`}>{card.rank.toString().padStart(2,'0')} · {card[language].title||card.zh.title}{card.selected?<span>{en?'Closer look':'详情卡'}</span>:null}</a></li>)}</ol></nav>:null}
   {data.cards.map(card=>{const copy=card[language];return <article key={card.id} id={card.id} className="publication-story">
+   {card.photo?<figure className="publication-news-photo"><img src={`data:image/webp;base64,${card.photo.dataBase64}`} width={card.photo.width} height={card.photo.height} alt={copy.title}/><figcaption><a href={card.photo.pageUrl} target="_blank" rel="noopener noreferrer">{en?'Image: ':'配图：'}{card.photo.publisher} ↗</a></figcaption></figure>:null}
    {!singleArticle?<><p className="publication-kicker">{en?'ORIGINAL RANK':'原榜'} #{card.rank}</p><h2>{copy.article?.title||copy.title||card.zh.title}</h2></>:null}
    {copy.article?.body?<ArticleText body={copy.article.body} sources={card.links} headingLevel={singleArticle?2:3}/>:<>
     {copy.summary?<section><h3>{en?'What happened':'发生了什么'}</h3><p>{copy.summary}</p></section>:null}

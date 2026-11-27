@@ -28,6 +28,8 @@ export function validateShareEnStructure(value:unknown,report:WccatDailyReport,o
  const data=record(value,'ShareEn');
  if(data.version!==1)throw new Error('Unsupported ShareEn version');
  if(data.layout!==undefined&&data.layout!=='editorial')throw new Error('Unknown ShareEn layout');
+ if(data.reportingPolicy!==undefined&&data.reportingPolicy!=='current-news-v1')throw new Error('Unknown ShareEn reporting policy');
+ const reportingPolicy=data.reportingPolicy==='current-news-v1'?'current-news-v1' as const:undefined;
  const editorial=data.layout==='editorial';
  const fingerprint=text(data.sourceFingerprint,'sourceFingerprint',false);
  if(!/^[a-f0-9]{64}$/.test(fingerprint))throw new Error('Invalid ShareEn source fingerprint');
@@ -74,7 +76,7 @@ export function validateShareEnStructure(value:unknown,report:WccatDailyReport,o
   if(h.battle!==undefined&&!battle)options.onWarning?.('ShareEn optional debate content omitted; article remains usable.');
   return {...(column?{column}:{}),...(imageAsset?{imageAsset}:{}),...(imageUrl?{imageUrl}:{}),...(hideImage!==undefined?{hideImage}:{}),...(battle?{battle}:{}),topicId:h.topicId,hook:text(h.hook,'highlight.hook'),whatHappened:text(h.whatHappened,'highlight.whatHappened'),context:typeof h.context==='string'?h.context.trim():'',whyItMatters:text(h.whyItMatters,'highlight.whyItMatters')};
  });
- if(editorial&&!validShareEnHighlightIds(checkedHighlights.map(h=>h.topicId),report,true))throw new Error('Invalid editorial highlight selection: use the supported source stories');
+ if(editorial&&!validShareEnHighlightIds(checkedHighlights.map(h=>h.topicId),report,true,reportingPolicy))throw new Error('Invalid editorial highlight selection: use the supported source stories');
  if(data.captionBasis!==undefined&&data.captionBasis!=='highlights')throw new Error('Unknown caption basis');
  const top3=list(data.top3,'top3'),top=data.captionBasis==='highlights'?checkedHighlights.map(h=>expected.find(t=>t.id===h.topicId)!):originalTop3(report);
  if(top3.length!==top.length)throw new Error('Incomplete top3 summaries');
@@ -103,7 +105,7 @@ export function validateShareEnStructure(value:unknown,report:WccatDailyReport,o
  if(!postIds.has(selectedPostId))throw new Error('Unknown selectedPostId');
  const altTexts=list(data.altTexts,'altTexts');
  if(altTexts.length!==highlights.length+1)throw new Error('Incomplete card altTexts');
- const checked:ShareEnCopy={version:1,generatedAt,model,sourceFingerprint:fingerprint,...(editorial?{layout:'editorial' as const}:{}),...(data.captionBasis==='highlights'?{captionBasis:'highlights' as const}:{}),overview:{headline:text(overview.headline,'overview.headline'),summary:typeof overview.summary==='string'?overview.summary.trim():'',topics:checkedTopics},highlights:checkedHighlights,top3:checkedTop3,posts:checkedPosts,selectedPostId,altTexts:altTexts.map((t,i)=>text(t,`altTexts[${i}]`))};
+ const checked:ShareEnCopy={version:1,generatedAt,model,sourceFingerprint:fingerprint,...(editorial?{layout:'editorial' as const}:{}),...(reportingPolicy?{reportingPolicy}:{}),...(data.captionBasis==='highlights'?{captionBasis:'highlights' as const}:{}),overview:{headline:text(overview.headline,'overview.headline'),summary:typeof overview.summary==='string'?overview.summary.trim():'',topics:checkedTopics},highlights:checkedHighlights,top3:checkedTop3,posts:checkedPosts,selectedPostId,altTexts:altTexts.map((t,i)=>text(t,`altTexts[${i}]`))};
  const sourceText=[report.headline,report.overview,...report.topics.map(t=>[t.title,t.oneLine,t.whyItMatters].join(' '))].join(' ');
  const englishText=[checked.overview.headline,checked.overview.summary,...checked.overview.topics.map(t=>t.title),...checked.highlights.flatMap(h=>[h.hook,h.whatHappened,h.context,h.whyItMatters])].join(' ');
  try{

@@ -4,8 +4,8 @@ import type { ZipEntry } from './client-zip';
 import {shareEnImage} from './shareen-media';
 import {buildChineseDailyCards,getDailyCardBattle} from './daily-bilingual-cards';
 import type {ShareLanguage} from './daily-share-copy';
-import {shareEnCommentSource} from './comments/sharing';
-import {visibleCommentQuotes,excerptComment} from './comments/selection';
+import {shareEnCommentRows} from './comments/sharing';
+import {excerptComment} from './comments/selection';
 import {shareEnOverviewAltText} from './shareen-overview';
 import type {PublicationReference} from './publications/types';
 import {publicationTextFiles} from './publications/materials';
@@ -37,20 +37,19 @@ function currentAltText(report:WccatDailyReport,copy:ShareEnCopy,index:number,te
  if(language==='zh'){
   const battle=getDailyCardBattle(report,copy,index,language);
   const energy=battle?` AI 相对情绪能量（来源分析，非民调）：${battle.redLabel} ${battle.redScore}，${battle.blueLabel} ${battle.blueScore}。${battle.redRationale} ${battle.blueRationale}`:'';
-  const source=shareEnCommentSource(report,copy,index,language);
-  const rows=source?visibleCommentQuotes(source.examples,source.battle,language):[];
-  const comments=rows.map(({side,quote,text})=>`${side==='red'?'红侧':'蓝侧'}原文：“${excerptComment(text,'zh').text}”（${quote.sourceName}${quote.likes!==undefined?`，${quote.likes} 赞`:''}）。`).join(' ');
+  const rows=shareEnCommentRows(report,copy,index,language);
+  const comments=rows.map(({side,quote,text})=>`${side==='red'?'红侧':side==='blue'?'蓝侧':'网友'}原文：“${excerptComment(text,'zh').text}”（${quote.sourceName}${quote.likes!==undefined?`，${quote.likes} 赞`:''}）。`).join(' ');
   return `${text}${energy}${comments?` 评论摘选（非民调）：${comments}`:''}`;
  }
  // Retire only the old auto-generated three-signal description; preserve custom ALT edits.
  if(index===0&&copy.layout==='editorial'&&text.startsWith(`WcCAT, ${report.reportDate}. Selected signals from China's internet:`))return shareEnOverviewAltText(report,copy.overview.topics);
  const base=text.replace(/\sDebate energy \((?:existing (?:AI )?analysis|AI estimate)\):[^\n]*$/u,'');
- const battle=getDailyCardBattle(report,copy,index);if(!battle)return base;
- const energy=`Debate energy (${battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${battle.redLabel} ${battle.redScore}, ${battle.blueLabel} ${battle.blueScore}. ${battle.redRationale} ${battle.blueRationale}`;
- const source=shareEnCommentSource(report,copy,index),rows=source?visibleCommentQuotes(source.examples,source.battle,'en'):[];
+ const battle=getDailyCardBattle(report,copy,index);
+ const energy=battle?`Debate energy (${battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${battle.redLabel} ${battle.redScore}, ${battle.blueLabel} ${battle.blueScore}. ${battle.redRationale} ${battle.blueRationale}`:'';
+ const rows=shareEnCommentRows(report,copy,index,'en');
  if(!rows.length)return `${base} ${energy}`;
  const comments=rows.map(({side,quote,text})=>`${side}: “${Array.from(excerptComment(text,'en').text).slice(0,170).join('')}” (${quote.sourceId}${quote.likes!==undefined?`, ${quote.likes} likes`:''}).`).join(' ');
- return `${base.slice(0,260)} ${energy.slice(0,180)} Sampled comments (AI-translated excerpts, not a poll): ${comments}`;
+ return `${base.slice(0,260)} ${energy.slice(0,180)} Selected comments (translations or labelled Chinese originals, not a poll): ${comments}`;
 }
 
 export function shareEnTextFiles(report: WccatDailyReport, englishCopy: ShareEnCopy, language:ShareLanguage='en'): ZipEntry[] {
@@ -67,17 +66,16 @@ export function shareEnTextFiles(report: WccatDailyReport, englishCopy: ShareEnC
    en?'Observed platform ranking signals, not a population survey or independently verified reporting.':'内容来自已保存日报与平台榜单。榜单信号与 AI 情绪能量不代表民调或独立核实报道。',
    '', ...report.topics.slice(0,10).flatMap(topic=>[
     `${en?'Original rank':'原榜'} #${topic.rank}: ${topic.title}`,
-    ...topic.links.map(link=>`${link.sourceName}: ${link.url}`), '',
+    ...topic.links.map(link=>`${link.sourceName}: ${link.url}`),...(topic.research?.documents??[]).map(doc=>`[${doc.id}] ${doc.publisher} · ${doc.title}: ${doc.url}${doc.publishedAt?` (${doc.publishedAt})`:''}`), '',
     ...(topic.relatedDevelopments??[]).flatMap(stage=>[`${en?'Related development (separate fact)':'同一主线的其他进展（独立事实）'}: ${stage.title}`,...stage.links.map(link=>`${link.sourceName}: ${link.url}`),''])
    ]),
    en?'Focus card image URLs:':'精选详情卡配图 URL：',...(copy.highlights??[]).map((_,index)=>{const image=shareEnImage(report,copy,index+1);return `${en?'Card':'卡片'} ${String(index+2).padStart(2,'0')}: ${image?.url??(copy.highlights[index].hideImage?(en?'Image hidden by administrator':'管理员已隐藏配图'):(en?'No approved image available':'无可用的已审核配图'))}`;}),
    en?'Focus card debate energy:':'精选详情卡 AI 相对情绪能量：',...(copy.highlights??[]).map((h,index)=>{const battle=getDailyCardBattle(report,copy,index+1,language);return `${en?'Original rank':'原榜'} #${report.topics.find(t=>t.id===h.topicId)?.rank??'?'}: ${battle?`${battle.redLabel} ${battle.redScore} ${en?'vs':'对'} ${battle.blueLabel} ${battle.blueScore} (${en?(battle.basis==='analysis'?'existing analysis':'AI estimate'):'来源分析'}; ${en?'relative energy, not a poll':'相对能量，非民调'})`:(en?'Attitude analysis unavailable':'无可用情绪分析')}`;}),
    ...(copy.highlights??[]).flatMap((_,index)=>{
-    const source=shareEnCommentSource(report,copy,index+1,language);if(!source)return [];
-    return visibleCommentQuotes(source.examples,source.battle,language).flatMap(({side,quote})=>[
-     en?`Card ${index+2} sampled ${side} comment (${source.examples!.sampleCount} sampled; not a poll):`:`卡片 ${index+2} ${side==='red'?'红侧':'蓝侧'}评论（采样 ${source.examples!.sampleCount} 条；非民调）：`,
+    return shareEnCommentRows(report,copy,index+1,language).flatMap(({side,quote})=>[
+     en?`Card ${index+2} selected ${side} comment (not a poll):`:`卡片 ${index+2} ${side==='red'?'红侧':side==='blue'?'蓝侧':'网友'}评论（非民调）：`,
      `ID: ${quote.id}`,`${en?'Source':'来源'}: ${quote.url}`,`${en?'Observed':'采集时间'}: ${quote.observedAt}`,`${en?'Likes':'点赞'}: ${quote.likes??(en?'not provided':'未提供')}`,
-     `${en?'Original':'原文'}: ${quote.text}`,...(en?[`AI translation${quote.englishIsExcerpt?' (source excerpt)':''}: ${quote.englishText}`]:[])
+     `${en?'Original':'原文'}: ${quote.text}`,...(en&&quote.englishText?[`AI translation${quote.englishIsExcerpt?' (source excerpt)':''}: ${quote.englishText}`]:[])
     ]);
    })
   ].join('\n')}
@@ -92,7 +90,7 @@ export function dailyCardFilename(index:number,language:ShareLanguage):string {
 
 export function bilingualDailyTextFiles(report:WccatDailyReport,copy:ShareEnCopy,publication?:{reference:PublicationReference;origin:string}):ZipEntry[] {
  const files=(['en','zh'] as const).flatMap(language=>shareEnTextFiles(report,copy,language).map(file=>({...file,name:`${language}-${file.name}`})));
- const hasComments=(language:'en'|'zh')=>copy.highlights.some((_,index)=>{const source=shareEnCommentSource(report,copy,index+1,language);return source&&visibleCommentQuotes(source.examples,source.battle,language).length>0;});
+ const hasComments=(language:'en'|'zh')=>copy.highlights.some((_,index)=>shareEnCommentRows(report,copy,index+1,language).length>0);
  return [...files,...(publication?publicationTextFiles(publication.reference,publication.origin,{en:hasComments('en'),zh:hasComments('zh')}):[])];
 }
 

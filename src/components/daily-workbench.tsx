@@ -196,8 +196,8 @@ function DailyTopicInsight({ topic }: { topic: DailyReportTopic }) {
       </div>
       <h3>{topic.title}</h3>
 
-      {topic.cover ? (
-        <InsightImage label="24H SIGNAL" src={proxiedImageSrc(topic.cover, topic.coverSourceId)} />
+      {topic.photo || topic.cover ? (
+        <InsightImage label={topic.photo?.publisher??"24H SIGNAL"} src={topic.photo?`data:image/webp;base64,${topic.photo.dataBase64}`:proxiedImageSrc(topic.cover!, topic.coverSourceId)} />
       ) : null}
 
       <section className="insight-block summary-core">
@@ -223,7 +223,7 @@ function DailyTopicInsight({ topic }: { topic: DailyReportTopic }) {
         </div>
       </section>
 
-      <CommentQuotes examples={analysis?.commentExamples} battle={analysis?.battle}/>
+      <CommentQuotes examples={analysis?.commentExamples} battle={analysis?.battle} observations={topic.readerComments}/>
 
       <section className="insight-block">
         <span className="card-label">Analysis</span>

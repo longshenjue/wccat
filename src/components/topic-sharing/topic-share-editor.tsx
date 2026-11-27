@@ -12,6 +12,8 @@ import {TOPIC_SHARE_WIDTH,TopicSharePoster,topicSharePosterHeight} from './topic
 import {prepareTopicShareDraft} from '../../lib/topic-sharing/validation';
 import {TopicShareReview} from './topic-share-review';
 import {TopicShareCopyFields} from './topic-share-copy-fields';
+import {topicShareReadiness} from '../../lib/topic-sharing/readiness';
+import {topicReaderComments} from '../../lib/topic-sharing/readers';
 import {topicShareBaseFingerprint} from '../../lib/topic-sharing/source-identity';
 import type {PublicationReference} from '../../lib/publications/types';
 import {requestPublication} from '../../lib/publications/client';
@@ -48,6 +50,7 @@ export function TopicShareEditor({sourceRef,recordId,onClose,onRecordSaved}:Edit
  const sourceChanged=Boolean(saved&&generationSource&&topicShareBaseFingerprint(saved.source)!==topicShareBaseFingerprint(generationSource));
  const loading=!current,busy=loading||Boolean(operation)||Boolean(job);
  const editableRecord=saved&&draft?{...saved,copy:draft}:undefined;
+ const readiness=editableRecord?topicShareReadiness(editableRecord):{ready:false,missing:[],message:''};
  const publication=!dirty&&prepared?.key===saved?.revision?prepared?.value:undefined;
  const local=draft?.[language],selected=local?.posts.find(post=>post.id===local.selectedPostId)??local?.posts[0];
  const reviewWarnings=useMemo(()=>{
@@ -91,7 +94,7 @@ export function TopicShareEditor({sourceRef,recordId,onClose,onRecordSaved}:Edit
     const data=await fetch(resultId?idPath(resultId):refPath(ref),{cache:'no-store',signal:controller.signal}).then(readResponse<TopicShareData>);
     if(controller.signal.aborted)return;
     setView({key:activeKey,data});setDraft(data.record?.copy);setDirty(false);setConflict(false);setColumn(data.record?.copy.column??data.recommendation.column);setJob(undefined);
-    if(['complete','ready'].includes(next.status)&&data.record){setMessage('双语稿件已生成并保存，可以编辑或下载。');setError('');}
+    if((['complete','ready'].includes(next.status)||next.status==='partial'&&next.result?.topicSharing?.id)&&data.record){setMessage(topicShareReadiness(data.record).ready?'双语稿件与新闻素材已保存，可以编辑或下载。':topicShareReadiness(data.record).message);setError('');}
     else setError(next.error??(next.status==='partial'?'生成任务部分完成，请检查稿件与任务日志。':`生成任务已${next.status==='cancelled'?'取消':'结束但未成功'}，请检查任务日志后重试。`));
    }catch(cause){if(!controller.signal.aborted){setJob(undefined);setError(cause instanceof Error?cause.message:'读取任务进度失败，后台任务可能仍在运行。');}}
   };
@@ -153,7 +156,7 @@ export function TopicShareEditor({sourceRef,recordId,onClose,onRecordSaved}:Edit
  }
  function downloadPost(){if(selected)downloadBlob(new Blob([selected.text+'\n'],{type:'text/plain;charset=utf-8'}),`post-${language}.txt`);}
  async function download(languages:TopicShareLanguage[]){
-  if(busy||dirty||!saved||!draft||conflict)return;
+  if(busy||dirty||!saved||!draft||conflict||!readiness.ready)return;
   const record={...saved,copy:draft};
   setOperation('export');setError('');setMessage('');
   try{
@@ -200,11 +203,11 @@ export function TopicShareEditor({sourceRef,recordId,onClose,onRecordSaved}:Edit
    {dirty?<p className="topic-notice" role="status">有未保存编辑。预览显示当前编辑稿；保存后才能导出或重新生成。中英文切换会保留两种语言的修改。</p>:null}
    {conflict?<div className="topic-conflict" role="alert"><p>服务器稿件或来源已更新。本地修改已保留，可先复制配文，再重新载入保存稿。</p></div>:null}
    {editableRecord&&local?<>
-    <TopicShareReview warnings={reviewWarnings}/>
+    <TopicShareReview warnings={reviewWarnings}/>{!readiness.ready?<div className="topic-notice" role="status"><strong>文案已保存 · 素材待补齐</strong><p>{readiness.message}</p><p>不会用假图或虚构评论补位。重新生成会继续检索当前报道与素材。</p>{source.assetWarnings?.map((warning,index)=><p key={index}>{warning}</p>)}</div>:null}
     <div className="topic-editor-toolbar"><div className="topic-language-tabs" role="tablist" aria-label="分享语言">{(['en','zh'] as const).map(lang=><button key={lang} type="button" role="tab" aria-selected={language===lang} aria-controls="topic-localized-content" id={`topic-language-${lang}`} disabled={operation==='export'} onClick={()=>setLanguage(lang)}>{lang==='en'?'English':'中文'}</button>)}</div><span className={dirty?'topic-draft-badge':'topic-saved-badge'}>{dirty?'未保存编辑':'已保存版本'}</span><button type="button" className="data-primary" disabled={busy||!dirty||conflict} onClick={save}>{operation==='save'?'正在保存…':'保存双语编辑'}</button></div>
     <div className="topic-editor-workspace" id="topic-localized-content" role="tabpanel" aria-labelledby={`topic-language-${language}`}>
-     <section className="topic-copy-editor"><h3>{language==='en'?'发布主帖配文 · English':'发布主帖配文 · 中文'}</h3><label>配文候选<select value={selected?.id??''} disabled={busy} onChange={event=>edit(copy=>({...copy,selectedPostId:event.target.value}))}>{local.posts.map((post,index)=><option key={post.id} value={post.id}>{index+1}. {postPatternLabels[post.pattern]??'其他角度'}{reviewWarnings.some(item=>item.path.startsWith(`${language}.posts[${index}].`))?' ⚠':''}</option>)}</select></label>{selected?<><p className="topic-small">选择理由：{selected.reason}</p><label>主帖配文<textarea aria-label="所选配文" lang={language} rows={7} value={selected.text} disabled={busy} onChange={event=>edit(copy=>updateSelectedTopicSharePost(copy,event.target.value))}/></label></>:null}<button type="button" disabled={!selected} onClick={copyPost}>复制主帖配文</button><button type="button" disabled={!selected} onClick={downloadPost}>↓ 主帖配文 TXT</button><PublicationControls language={language} publication={publication} disabled={busy||dirty||conflict} prepare={preparePublication} hasComments={usableTopicQuotes(source,language).length>0} mainPost={selected?.text??''} hasArticle={!!local.article?.body}/><details open><summary>编辑主图与配套文章</summary><TopicShareCopyFields copy={local} news={draft.editorialPolicy==='news-commentary-v1'} language={language} disabled={busy} onChange={next=>edit(()=>next)}/><label>补充回复（每段一条；来源回复单独生成）<textarea aria-label="补充回复 / 来源回复（每段一条）" lang={language} rows={5} value={local.replies.join('\n\n')} disabled={busy} onChange={event=>edit(copy=>({...copy,replies:event.target.value.split(/\n\s*\n/)}))}/></label></details></section>
-     <section className="topic-preview-panel"><h3>品牌卡片预览</h3><div ref={previewRoot}><ScaledPoster width={TOPIC_SHARE_WIDTH} height={previewHeight}><TopicSharePoster record={editableRecord} language={language} publication={publication}/></ScaledPoster></div>{layoutError?<p className="data-error" role="alert">{layoutError}</p>:null}<p className="topic-small">1080 × {previewHeight} · {dirty?'当前编辑稿':'已保存稿'} · 真实评论沿用保存来源，不能在这里修改。</p><div className="topic-export-actions"><button type="button" disabled={busy||dirty||conflict||Boolean(layoutError)} onClick={()=>download([language])}>↓ {language==='en'?'English':'中文'} PNG</button><button type="button" disabled={busy||dirty||conflict||Boolean(layoutError)} onClick={()=>download(['en','zh'])}>↓ 双语完整 ZIP</button></div><p className="topic-small">下载会准备公开资料页。ZIP：双语主图、配文、两篇 Markdown 文章、文章链接回复、Alt text 与完整来源。</p></section>
+     <section className="topic-copy-editor"><h3>{language==='en'?'发布主帖配文 · English':'发布主帖配文 · 中文'}</h3><label>配文候选<select value={selected?.id??''} disabled={busy} onChange={event=>edit(copy=>({...copy,selectedPostId:event.target.value}))}>{local.posts.map((post,index)=><option key={post.id} value={post.id}>{index+1}. {postPatternLabels[post.pattern]??'其他角度'}{reviewWarnings.some(item=>item.path.startsWith(`${language}.posts[${index}].`))?' ⚠':''}</option>)}</select></label>{selected?<><p className="topic-small">选择理由：{selected.reason}</p><label>主帖配文<textarea aria-label="所选配文" lang={language} rows={7} value={selected.text} disabled={busy} onChange={event=>edit(copy=>updateSelectedTopicSharePost(copy,event.target.value))}/></label></>:null}<button type="button" disabled={!selected} onClick={copyPost}>复制主帖配文</button><button type="button" disabled={!selected} onClick={downloadPost}>↓ 主帖配文 TXT</button><PublicationControls language={language} publication={publication} disabled={busy||dirty||conflict||!readiness.ready} prepare={preparePublication} hasComments={topicReaderComments(source).length>0||usableTopicQuotes(source,language).length>0} mainPost={selected?.text??''} hasArticle={!!local.article?.body}/><details open><summary>编辑主图与配套文章</summary><TopicShareCopyFields copy={local} news={!!draft.editorialPolicy} language={language} disabled={busy} onChange={next=>edit(()=>next)}/><label>补充回复（每段一条；来源回复单独生成）<textarea aria-label="补充回复 / 来源回复（每段一条）" lang={language} rows={5} value={local.replies.join('\n\n')} disabled={busy} onChange={event=>edit(copy=>({...copy,replies:event.target.value.split(/\n\s*\n/)}))}/></label></details></section>
+     <section className="topic-preview-panel"><h3>品牌卡片预览</h3><div ref={previewRoot}><ScaledPoster width={TOPIC_SHARE_WIDTH} height={previewHeight}><TopicSharePoster record={editableRecord} language={language} publication={publication}/></ScaledPoster></div>{layoutError?<p className="data-error" role="alert">{layoutError}</p>:null}<p className="topic-small">1080 × {previewHeight} · {dirty?'当前编辑稿':'已保存稿'} · 配图与真实评论来自已保存的原始来源。</p><div className="topic-export-actions"><button type="button" disabled={busy||dirty||conflict||Boolean(layoutError)||!readiness.ready} onClick={()=>download([language])}>↓ {language==='en'?'English':'中文'} PNG</button><button type="button" disabled={busy||dirty||conflict||Boolean(layoutError)||!readiness.ready} onClick={()=>download(['en','zh'])}>↓ 双语完整 ZIP</button></div><p className="topic-small">下载会准备公开资料页。ZIP：双语主图、配文、两篇 Markdown 文章、文章链接回复、Alt text 与完整来源。</p></section>
     </div>
    </>:<div className="topic-empty"><h3>尚未生成这个话题的双语分享</h3><p>先核对材料与栏目，再点击“生成双语文案 · AI”。生成后可独立编辑英文和中文内容。</p></div>}
   </>:null}

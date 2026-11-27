@@ -6,8 +6,8 @@ export function ArticleText({body,sources,headingLevel=3}:{body:string;sources:P
  const Heading=headingLevel===2?'h2':'h3';
  const references=sources.filter(source=>source.researchId);
  function inline(value:string):ReactNode[]{
-  return value.split(/(\[r-[a-z0-9-]+\]|\*\*[^*]+\*\*)/g).map((part,index)=>{
-   const id=part.match(/^\[(r-[a-z0-9-]+)\]$/)?.[1],reference=id?references.find(source=>source.researchId===id):undefined;
+  return value.split(/(\[[a-z][a-z0-9:_-]*\]|\*\*[^*]+\*\*)/gi).map((part,index)=>{
+   const id=part.match(/^\[([a-z][a-z0-9:_-]*)\]$/i)?.[1],reference=id?references.find(source=>source.researchId===id):undefined;
    if(reference)return <sup key={index}><a href={`#${id}`} title={reference.title}>[{references.indexOf(reference)+1}]</a></sup>;
    if(part.startsWith('**')&&part.endsWith('**'))return <strong key={index}>{part.slice(2,-2)}</strong>;
    return part;

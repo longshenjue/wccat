@@ -9,7 +9,7 @@ import {shareEnOverviewAltText} from './shareen-overview';
 import {relatedDevelopmentText,dailyStoryLinks,dailyStoryEvidence} from './daily-story-selection';
 
 type Fields=Record<string,unknown>;
-export type ShareEnDraftState={layout?:'editorial';topics:Record<string,Fields>;highlightIds:unknown;posts:unknown;selectedPostId:unknown;top3:unknown};
+export type ShareEnDraftState={layout?:'editorial';reportingPolicy?:'current-news-v1';topics:Record<string,Fields>;highlightIds:unknown;posts:unknown;selectedPostId:unknown;top3:unknown};
 export type ShareEnRepair={topicId?:string;field:'title'|'hook'|'whatHappened'|'whyItMatters'|'battle'|'highlightIds';required:boolean;reason:string};
 const fields=['title','hook','whatHappened','whyItMatters','battle'] as const;
 const object=(v:unknown):Fields=>v&&typeof v==='object'&&!Array.isArray(v)?v as Fields:{};
@@ -22,20 +22,20 @@ const originalTopics=(report:WccatDailyReport)=>report.topics.slice(0,10);
 export function shareEnEditorialSource(report:WccatDailyReport,topicId:string):TopicShareSource {
  const topic=originalTopics(report).find(t=>t.id===topicId);
  if(!topic)throw new Error('Unknown editorial topic identity');
- return {ref:{kind:'daily',date:report.reportDate,topicId},sourceKey:topicId,fingerprint:'',date:report.reportDate,observedAt:report.generatedAt,topicId,title:topic.title,summary:topic.oneLine,detail:[topic.aiAnalysis?.detailedContent,relatedDevelopmentText(topic)].filter(Boolean).join('\n\n'),context:topic.aiAnalysis?.outsiderContext??topic.whyItMatters,categories:topic.categories,rank:topic.rank,signal:topic.signal,links:dailyStoryLinks(topic),analysis:topic.aiAnalysis};
+ return {ref:{kind:'daily',date:report.reportDate,topicId},sourceKey:topicId,fingerprint:'',date:report.reportDate,observedAt:report.generatedAt,topicId,title:topic.title,summary:topic.oneLine,detail:[topic.aiAnalysis?.detailedContent,relatedDevelopmentText(topic)].filter(Boolean).join('\n\n'),context:topic.aiAnalysis?.outsiderContext??topic.whyItMatters,categories:topic.categories,rank:topic.rank,signal:topic.signal,links:dailyStoryLinks(topic),analysis:topic.aiAnalysis,readerComments:topic.readerComments,research:topic.research};
 }
 /** A ranking headline alone cannot support an explanatory story card. */
-export function shareEnSupportedTopicIds(report:WccatDailyReport):string[] {
- return originalTopics(report).filter(topic=>dailyStoryEvidence(topic).length>0).map(topic=>topic.id);
+export function shareEnSupportedTopicIds(report:WccatDailyReport,currentReporting=false):string[] {
+ return originalTopics(report).filter(topic=>dailyStoryEvidence(topic).length>0&&(!currentReporting||topic.research?.documents.some(doc=>doc.purpose==='event'))).map(topic=>topic.id);
 }
-export function validShareEnHighlightIds(ids:unknown,report:WccatDailyReport,editorial=false):ids is string[] {
- const allowed=editorial?shareEnSupportedTopicIds(report):originalTopics(report).map(t=>t.id);
+export function validShareEnHighlightIds(ids:unknown,report:WccatDailyReport,editorial=false,policy?:ShareEnCopy['reportingPolicy']):ids is string[] {
+ const allowed=editorial?shareEnSupportedTopicIds(report,policy==='current-news-v1'):originalTopics(report).map(t=>t.id);
  const target=editorial?Math.min(3,allowed.length):2;
  return Array.isArray(ids)&&target>0&&ids.length>=target&&ids.length<=(editorial?target:3)&&new Set(ids).size===ids.length&&ids.every(id=>typeof id==='string'&&allowed.includes(id));
 }
 
 /** Model IDs are keys, never positions. Metadata and final ranking are owned by the server. */
-export function readShareEnDraft(value:unknown,report:WccatDailyReport,options:{layout?:'editorial'}={}):ShareEnDraftState {
+export function readShareEnDraft(value:unknown,report:WccatDailyReport,options:{layout?:'editorial';reportingPolicy?:'current-news-v1'}={}):ShareEnDraftState {
  const data=object(value),expected=new Set(originalTopics(report).map(t=>t.id));
  const topics:Record<string,Fields>=Object.fromEntries([...expected].map(id=>[id,{}]));
  const keyed=data.topics;
@@ -71,15 +71,15 @@ export function readShareEnDraft(value:unknown,report:WccatDailyReport,options:{
    if(cached?.length===1&&isEnglish(cached[0].title))topics[topic.id].title=cached[0].title;
   }
  }
- return {...(options.layout==='editorial'||data.layout==='editorial'?{layout:'editorial' as const}:{}),topics,highlightIds:data.highlightIds??ids,posts:data.posts,selectedPostId:data.selectedPostId,top3:data.top3};
+ return {...(options.layout==='editorial'||data.layout==='editorial'?{layout:'editorial' as const}:{}),...(options.reportingPolicy?{reportingPolicy:options.reportingPolicy}:{}),topics,highlightIds:data.highlightIds??ids,posts:data.posts,selectedPostId:data.selectedPostId,top3:data.top3};
 }
 
 export function shareEnRepairs(state:ShareEnDraftState,report:WccatDailyReport):ShareEnRepair[]{
  const repairs:ShareEnRepair[]=[],expected=originalTopics(report);
  for(const topic of expected)if(!isEnglish(state.topics[topic.id]?.title))repairs.push({topicId:topic.id,field:'title',required:true,reason:'Missing or non-English title'});
  const ids=state.highlightIds;
- if(!validShareEnHighlightIds(ids,report,state.layout==='editorial')){
-  repairs.push({field:'highlightIds',required:true,reason:state.layout==='editorial'?`Choose exactly ${Math.min(3,shareEnSupportedTopicIds(report).length)} supported original topic IDs, with hook, whatHappened and whyItMatters for each choice; never pad headline-only material`:'Choose 2–3 distinct original topic IDs, with hook, whatHappened and whyItMatters for each choice'});
+ if(!validShareEnHighlightIds(ids,report,state.layout==='editorial',state.reportingPolicy)){
+  repairs.push({field:'highlightIds',required:true,reason:state.layout==='editorial'?`Choose exactly ${Math.min(3,shareEnSupportedTopicIds(report,state.reportingPolicy==='current-news-v1').length)} supported original topic IDs, with hook, whatHappened and whyItMatters for each choice; never pad headline-only material`:'Choose 2–3 distinct original topic IDs, with hook, whatHappened and whyItMatters for each choice'});
  }else for(const id of ids as string[]){
   for(const [field,budget] of [['hook',14],['whatHappened',40],['whyItMatters',30]] as const){
    const value=state.topics[id]?.[field];
@@ -107,7 +107,7 @@ export function applyShareEnRepair(state:ShareEnDraftState,value:unknown,repairs
  }
  if(repairs.some(r=>r.field==='highlightIds')){
   const ids=patch.highlightIds;
-  if(validShareEnHighlightIds(ids,report,state.layout==='editorial')){
+  if(validShareEnHighlightIds(ids,report,state.layout==='editorial',state.reportingPolicy)){
    next.highlightIds=ids;
    for(const id of ids as string[])for(const field of fields){
     const value=object(topics[id])[field];
@@ -166,5 +166,5 @@ export function completeShareEnDraft(state:ShareEnDraftState,report:WccatDailyRe
   return {id,template:typeof p.template==='string'&&p.template.trim()?p.template.trim():'daily_digest',reason:typeof p.reason==='string'&&p.reason.trim()?p.reason.trim():'The selected focus stories.',text:editorial?`${hook}\n\n${entries}\n\nWcCAT: China, in context. Read the cards; sources & context in the reply.`:`WcCAT Daily Hot\n\n${hook}\n\n${entries}\n\nWcCAT: read the cards. CHINA, IN CONTEXT.`};
  });
  const opener=editorial?shareEnOverviewAltText(report,topics):`WcCAT Daily Hot, ${report.reportDate}. China’s Top ${topics.length}: ${topics.map(t=>t.title).join('; ')}.`;
- return {...(editorial?{layout:'editorial' as const}:{}),captionBasis:'highlights',overview:{headline:editorial?'China, beyond the headlines':`China’s Top ${topics.length}`,summary:editorial?'Selected signals, with the context to understand them.':'',topics},highlights,top3,posts,selectedPostId:typeof state.selectedPostId==='string'&&seen.has(state.selectedPostId)?state.selectedPostId:posts[0].id,altTexts:[opener,...highlights.map(h=>`${h.column?columnForLanguage(h.column,'en')+'. ':''}${h.hook}. ${h.whatHappened} ${h.whyItMatters}${h.battle?` Debate energy (${h.battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${h.battle.redLabel} ${h.battle.redScore}, ${h.battle.blueLabel} ${h.battle.blueScore}. ${h.battle.redRationale} ${h.battle.blueRationale}`:''}`)]};
+ return {...(editorial?{layout:'editorial' as const}:{}),...(state.reportingPolicy?{reportingPolicy:state.reportingPolicy}:{}),captionBasis:'highlights',overview:{headline:editorial?'China, beyond the headlines':`China’s Top ${topics.length}`,summary:editorial?'Selected signals, with the context to understand them.':'',topics},highlights,top3,posts,selectedPostId:typeof state.selectedPostId==='string'&&seen.has(state.selectedPostId)?state.selectedPostId:posts[0].id,altTexts:[opener,...highlights.map(h=>`${h.column?columnForLanguage(h.column,'en')+'. ':''}${h.hook}. ${h.whatHappened} ${h.whyItMatters}${h.battle?` Debate energy (${h.battle.basis==='analysis'?'existing analysis':'AI estimate'}): ${h.battle.redLabel} ${h.battle.redScore}, ${h.battle.blueLabel} ${h.battle.blueScore}. ${h.battle.redRationale} ${h.battle.blueRationale}`:''}`)]};
 }

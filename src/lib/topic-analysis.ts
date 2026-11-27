@@ -1,3 +1,5 @@
+import {newsroomPrompt} from './newsroom/prompts';
+import {cleanGeneratedNewsValue} from './newsroom/prose';
 import type { Sentiment, TopicGroup, TopicOccurrence } from "./types";
 import { inferSentiment, sentimentLabel } from "./sentiment";
 import type { ArticleContext } from "./fulltext";
@@ -26,6 +28,7 @@ export type TopicAnalysis = {
   summary: string;
   detailedContent: string;
   outsiderContext: string;
+  editorialTake?:string;
   battle: BattleStance;
   platformAnalyses: PlatformAnalysis[];
   model: string;
@@ -187,7 +190,7 @@ export async function analyzeTopicWithDeepSeek(
         throw new Error("DeepSeek returned incomplete analysis fields");
       }
       failureStatus = "exception";
-      const analysis = normalizeAnalysis(parsed, fallback, model, previousAnalysis);
+      const analysis = normalizeAnalysis(cleanGeneratedNewsValue(parsed), fallback, model, previousAnalysis);
       onTrace?.({
         provider: "deepseek", model, status: "ok", durationMs: Date.now() - startedAt,
         usedFallback: false, request, response: responseDetails
@@ -226,48 +229,7 @@ function hasCompleteAnalysis(value: unknown, topic: TopicGroup) {
   return topic.occurrences.slice(0, 10).every((item) => analyzedSources.has(item.sourceId));
 }
 
-function buildAnalysisSystemPrompt() {
-  return `你是 WcCAT 的中文互联网观察分析器。你的任务不是翻译热搜，而是解释一个话题在不同中文平台中的情绪、利益冲突、关注动机和叙事差异。
-
-请严格输出 JSON，不要输出 Markdown。字段如下：
-{
-  "summary": "80字以内的话题摘要",
-  "detailedContent": "180字以内的详细内容，说明事件/话题本身发生了什么",
-  "outsiderContext": "120字以内，给不了解中文互联网的外国读者解释为什么这件事值得看",
-  "battle": {
-    "redLabel": "红色能量条代表的实际简略观点，不要写正方/反方",
-    "blueLabel": "蓝色能量条代表的实际简略观点，不要写正方/反方",
-    "redScore": 0-100,
-    "blueScore": 0-100,
-    "redRationale": "红色观点为什么有能量",
-    "blueRationale": "蓝色观点为什么有能量"
-  },
-  "platformAnalyses": [
-    {
-      "sourceId": "平台ID",
-      "sourceName": "平台名",
-      "attitude": "该平台对此话题的态度/讨论方式，不能只写平台通用描述",
-      "stance": "red|blue|neutral",
-      "confidence": 0-100,
-      "evidence": "从标题、描述、排名或平台语境提取的依据"
-    }
-  ],
-  "changeReason": "如果存在 previousAnalysis，说明本次相较上一版的变化原因；如果没有则写首次分析"
-}
-
-规则：
-- 红蓝不是道德正反方，必须使用从话题中提炼出的真实简略观点。
-- 不要编造未提供的事实；优先基于关联正文，其次基于输入标题、描述、来源、排名和平台属性推断。
-- 如果信息不足，明确说“从现有榜单信号看”。
-- supplementalEvidence 是带来源和采样时间的辅助热榜材料，不是独立事实核验。热搜指数、排名及标签不是评论或点赞量；没有互动样本时不要据此断言群体情绪或支持率。
-- 平台态度要比较差异：微博/百度/B站/澎湃/头条等不能全部说一样。
-- 如果输入中存在 previousAnalysis，必须把它作为稳定锚点：
-  - 除非出现官方通报、事实反转、新增关键来源或事件性质明显升级，否则 redLabel 和 blueLabel 必须沿用上一版。
-  - 不允许把红蓝两侧观点左右互换。
-  - redScore/blueScore 默认最多相较上一版变化 10 分。
-  - 如果你认为必须变化超过 10 分，changeReason 必须说明触发变化的具体新事实，但程序仍可能限制分数漂移。
-  - 不要把具体争议改写成泛泛价值判断。`;
-}
+function buildAnalysisSystemPrompt() {return newsroomPrompt('analysis');}
 
 function toPromptPayload(topic: TopicGroup, articleContexts: ArticleContext[], previousAnalysis?: TopicAnalysis) {
   return {
@@ -288,8 +250,7 @@ function toPromptPayload(topic: TopicGroup, articleContexts: ArticleContext[], p
       heatValue: item.heatValue,
       provider: item.provider,
       providerEndpoint: item.providerEndpoint,
-      contentType: item.contentType,
-      platformLens: platformLens[item.sourceId] ?? "通用中文互联网平台"
+      contentType: item.contentType
     })),
     supplementalEvidence: topic.supplementalEvidence?.slice(0,4)??[],
     articleContexts: articleContexts.map((context) => ({
@@ -340,6 +301,7 @@ function normalizeAnalysis(
     summary: toStringValue(value.summary) || fallback.summary,
     detailedContent: toStringValue(value.detailedContent) || fallback.detailedContent,
     outsiderContext: toStringValue(value.outsiderContext) || fallback.outsiderContext,
+    ...(toStringValue(value.editorialTake)?{editorialTake:toStringValue(value.editorialTake)}:{}),
     battle: {
       redLabel: previousAnalysis?.battle.redLabel || toStringValue(battle.redLabel) || fallback.battle.redLabel,
       blueLabel: previousAnalysis?.battle.blueLabel || toStringValue(battle.blueLabel) || fallback.battle.blueLabel,

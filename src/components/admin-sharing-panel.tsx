@@ -17,8 +17,7 @@ import './shareen.css';
 import type {PublicationReference} from '@/lib/publications/types';
 import {requestPublication} from '@/lib/publications/client';
 import {PublicationControls} from './publications/publication-controls';
-import {shareEnCommentSource} from '@/lib/comments/sharing';
-import {visibleCommentQuotes} from '@/lib/comments/selection';
+import {shareEnCommentRows} from '@/lib/comments/sharing';
 import {TopicShareRecommendations} from './topic-sharing/topic-share-recommendations';
 import './topic-sharing/topic-sharing.css';
 
@@ -92,7 +91,7 @@ export function AdminSharingPanel({date,revision,disabled,onDateChange,onGenerat
  const chinesePost=chinese.copy?.posts[0];
  const publicationKey=useMemo(()=>JSON.stringify([date,activeDraft?.expectedRevision,copy]),[date,activeDraft?.expectedRevision,copy]);
  const publication=prepared?.key===publicationKey?prepared.value:undefined;
- const hasComments=(language:ShareLanguage)=>Boolean(report&&copy&&copy.highlights.some((_,index)=>{const source=shareEnCommentSource(report,copy,index+1,language);return source&&visibleCommentQuotes(source.examples,source.battle,language).length>0;}));
+ const hasComments=(language:ShareLanguage)=>Boolean(report&&copy&&copy.highlights.some((_,index)=>shareEnCommentRows(report,copy,index+1,language).length>0));
  let longCopy;
  try {longCopy=report&&tab!=='shareen'?getDailyShareCopy(report,tab):undefined;} catch {longCopy=undefined;}
 

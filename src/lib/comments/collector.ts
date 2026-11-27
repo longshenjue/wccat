@@ -12,13 +12,13 @@ import {firstFeedItemEnvelope} from './first-feed-item';
 import type {CommentRequest,CommentSample,CommentThread,SampledComment,CommentLog} from './types';
 
 export const COMMENT_TTL=4*3600_000;
-type Dependencies={fetch?:typeof fetch;now?:()=>number;sleep?:(ms:number)=>Promise<void>;dailyLimit?:number;log?:CommentLog};
+type Dependencies={fetch?:typeof fetch;now?:()=>number;sleep?:(ms:number)=>Promise<void>;dailyLimit?:number;log?:CommentLog;maxThreads?:number};
 /** Hard bounds apply even if an upstream ignores its limit or pagination parameters. */
 export class CommentCollector {
   private state:ProviderState;private request:typeof fetch;private now:()=>number;private sleep:(ms:number)=>Promise<void>;private dailyLimit:number;
   constructor(private db:Database.Database,private options:Dependencies={}){
     this.state=new ProviderState(db);this.request=options.fetch??fetch;this.now=options.now??Date.now;this.sleep=options.sleep??(ms=>new Promise(resolve=>setTimeout(resolve,ms)));
-    this.dailyLimit=Math.min(100,Math.max(1,Math.floor(options.dailyLimit??100)));
+    this.dailyLimit=Number.isFinite(options.dailyLimit)?Math.min(100,Math.max(1,Math.floor(options.dailyLimit!))):100;
   }
   private async reserve(account:string,key:string,limit:number,generation:number){
     const owner=randomUUID();
@@ -56,9 +56,11 @@ export class CommentCollector {
   }
   async collect(occurrences:Array<{sourceId:string;url:string}>):Promise<CommentSample>{
     const generation=readGeneration(this.db),comments:SampledComment[]=[],runIds:string[]=[],threads=new Map<string,CommentThread>();
-    for(const item of occurrences.slice(0,30)){const thread=resolveCommentThread(item);if(thread&&!threads.has(thread.key))threads.set(thread.key,thread);if(threads.size===2)break;}
+    const maxThreads=Number.isFinite(this.options.maxThreads)?Math.min(6,Math.max(1,Math.floor(this.options.maxThreads!))):2;
+    for(const item of occurrences.slice(0,30)){const thread=resolveCommentThread(item);if(thread&&!threads.has(thread.key))threads.set(thread.key,thread);if(threads.size===maxThreads)break;}
     if(!threads.size)this.options.log?.('info','未找到可识别的评论原帖入口（搜索页或热点 ID 不等于原帖 ID）；未请求评论接口。');
     for(const thread of threads.values()){
+      if(comments.length>=40)break;
       const {result,owner}=await this.reserve('comments-sample-v1',thread.key,12,generation);
       if(result.kind==='cached'){
         const cached=result.payload as {comments:SampledComment[];runId:string};comments.push(...cached.comments.slice(0,20));runIds.push(cached.runId);this.options.log?.('info',`${thread.sourceName}：复用缓存 ${cached.comments.slice(0,20).length} 条。`);continue;

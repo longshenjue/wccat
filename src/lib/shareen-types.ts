@@ -7,6 +7,7 @@ export type ShareEnCopy={
  version:1;generatedAt:string;model:string;sourceFingerprint:string;
  /** Opt-in presentation and caption contract; absent on saved legacy editions. */
  layout?:'editorial';
+ reportingPolicy?:'current-news-v1';
  /** Absent on legacy caches whose numbered captions describe the original top three. */
  captionBasis?:'highlights';
  overview:{headline:string;summary:string;topics:Array<{id:string;title:string}>};

@@ -5,7 +5,7 @@ type NewsRequest={url:string;method?:'POST';body?:string;contentType?:string};
 const sourceNames:Record<NewsSource,string>={thepaper:'澎湃新闻','qq-news':'腾讯新闻','sina-news':'新浪新闻','netease-news':'网易新闻'};
 const hosts:Record<NewsSource,string[]>={
  thepaper:['www.thepaper.cn','m.thepaper.cn','thepaper.cn'],
- 'qq-news':['new.qq.com','view.inews.qq.com'],
+ 'qq-news':['new.qq.com','news.qq.com','view.inews.qq.com'],
  'sina-news':['news.sina.com.cn','finance.sina.com.cn','sports.sina.com.cn','ent.sina.com.cn','tech.sina.com.cn','mil.news.sina.com.cn'],
  'netease-news':['www.163.com','m.163.com'],
 };

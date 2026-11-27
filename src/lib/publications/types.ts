@@ -1,8 +1,9 @@
 export type PublicationLanguage='en'|'zh';
 export type PublicationLink={sourceId:string;name:string;title:string;url:string;kind:'article'|'post'|'topic'|'search'|'link';researchId?:string};
 export type PublicationText={title:string;summary:string;context:string;why:string;article?:{title:string;body:string}};
-export type PublicationComment={side:'red'|'blue';sourceId:string;sourceName:string;url:string;text:string;englishText?:string;englishIsExcerpt?:boolean;likes?:number};
-export type PublicationCard={id:string;rank:number;selected:boolean;en:PublicationText;zh:PublicationText;links:PublicationLink[];comments:PublicationComment[];imageUrl?:string;relatedDevelopments?:Array<{title:string;summary:string;links:PublicationLink[]}>};
+export type PublicationComment={side:'red'|'blue'|'neutral';sourceId:string;sourceName:string;url:string;text:string;englishText?:string;englishIsExcerpt?:boolean;likes?:number};
+export type PublicationPhoto={dataBase64:string;width:number;height:number;publisher:string;sourceUrl:string;pageUrl:string};
+export type PublicationCard={id:string;rank:number;selected:boolean;en:PublicationText;zh:PublicationText;links:PublicationLink[];comments:PublicationComment[];imageUrl?:string;photo?:PublicationPhoto;relatedDevelopments?:Array<{title:string;summary:string;links:PublicationLink[]}>};
 export type PublicationPayload={version:1;kind:'daily'|'topic'|'hourly';date:string;titles:Record<PublicationLanguage,string>;posts:Record<PublicationLanguage,string>;cards:PublicationCard[]};
 export type PublicationReference={id:string;reference:string;path:string};
 export type Publication={id:string;publishedAt:string;payload:PublicationPayload};

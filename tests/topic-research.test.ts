@@ -41,7 +41,7 @@ test('independent event lookup avoids repeating the same anchor and prioritizes 
  try{
   const queries:string[]=[];
   await researchTopicShare(source(),{plan:async()=>({questions:[],anchors:['lead azide','deteriorated lead azide','Iowa'],queries:[{query:'event update',purpose:'event'},{query:'official update',purpose:'event'}]}),search:async query=>{queries.push(query.query);return [];}});
-  assert.deepEqual(queries,['event update','"lead azide" Iowa']);
+  assert.deepEqual(queries,[source().title+' 2026-11-26','event update']);
   const links=primarySourceLinks('<a href="https://www.agency.gov/news/general-update">General</a><a href="https://www.agency.gov/news/other-update">Other</a><a href="https://www.agency.gov/news/iowa-lead-azide-update">Actual story</a>','https://example.com/article',['lead azide','Iowa']);
   assert.equal(links[0],'https://www.agency.gov/news/iowa-lead-azide-update');assert.equal(links.length,2);
  }finally{if(original===undefined)delete process.env.BRAVE_SEARCH_API_KEY;else process.env.BRAVE_SEARCH_API_KEY=original;}
@@ -74,6 +74,6 @@ test('configured search uses the official API without forwarding its secret to p
   let requests=0,reads=0;
   const options={signal:AbortSignal.timeout(1000),onApiRequest:()=>{requests++;},read:async(url:string)=>{reads++;assert.ok(!url.includes('private-test-key'));return {url,contentType:'text/xml',text:'<rss><channel><item><title>Iowa update</title><link>https://www.epa.gov/newsreleases/update</link></item></channel></rss>'};},fetch:async(url:RequestInfo|URL,init?:RequestInit)=>{assert.ok(String(url).startsWith('https://api.search.brave.com/res/v1/web/search?'));assert.equal(init?.redirect,'error');assert.equal(new Headers(init?.headers).get('X-Subscription-Token'),'private-test-key');return new Response(null,{status:503});}};
   const result=await searchResearchSources({query:'Iowa latest update',purpose:'event'},options);
-  assert.equal(requests,1);assert.equal(reads,1);assert.equal(result[0].url,'https://www.epa.gov/newsreleases/update');
+  assert.equal(requests,1);assert.equal(reads,3);assert.equal(result[0].url,'https://www.epa.gov/newsreleases/update');
  }finally{if(oldKey===undefined)delete process.env.BRAVE_SEARCH_API_KEY;else process.env.BRAVE_SEARCH_API_KEY=oldKey;}
 });

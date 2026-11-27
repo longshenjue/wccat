@@ -27,17 +27,25 @@ test('editorial validation reports every failing field instead of stopping at th
  }
 });
 
-test('generation supplies the same limits as validation and treats them as editing metadata',async()=>{
+test('generation keeps task instructions compact and avoids redundant numerical evidence inventories',async()=>{
  const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='reliability-test-secret';
  try{
   let calls=0;
   await generateTopicShare(spaceSource(),{column:'inside',fetch:async(_url,options)=>{
    calls++;const payload=JSON.parse(JSON.parse(String(options?.body)).messages.at(-1).content);
-   assert.deepEqual(payload.copyContract,TOPIC_SHARE_CONTRACT);
-   assert.equal(payload.copyContract.en.headline.maxWords,18);assert.equal(payload.copyContract.en.headline.maxChars,200);
-   assert.equal(payload.copyContract.zh.post.maxChars,140);assert.equal(payload.copyContract.en.post.maxChars,280);
-   assert.ok(!payload.allowedPatterns.includes('source_voice'));assert.ok(payload.source.numericalEvidence.numbers.includes('24/1'));
+   assert.equal(payload.copyContract,undefined);assert.equal(payload.source.numericalEvidence,undefined);
+   assert.equal(payload.source.title,spaceSource().title);assert.equal(payload.source.sourceReportDate,spaceSource().date);
+   assert.ok(!payload.allowedPatterns.includes('source_voice'));
    return response(spaceContent());
   }});assert.equal(calls,1);
+ }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
+});
+
+test('a broken JSON envelope gets one serialization-only retry while editorial doubts never trigger it',async()=>{
+ const previous=process.env.DEEPSEEK_API_KEY;process.env.DEEPSEEK_API_KEY='format-test-key';let calls=0;
+ try{
+  const original=spaceContent();original.en.summary='One astronaut recited 登鹳雀楼.';
+  const copy=await generateTopicShare(spaceSource(),{fetch:async(_url,options)=>{calls++;if(calls===1)return Response.json({choices:[{finish_reason:'stop',message:{content:'{"en":{"headline":"An unescaped "quote""}}'}}]});const payload=JSON.parse(String(options?.body));assert.match(payload.messages[0].content,/serialization|JSON syntax/i);assert.match(payload.messages[0].content,/preserve.*wording/i);return response(original);}});
+  assert.equal(calls,2);assert.equal(copy.en.summary,original.en.summary);
  }finally{if(previous===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=previous;}
 });

@@ -1,9 +1,12 @@
 import {visibleCommentQuotes} from '../comments/selection';
 import {topicEvidenceTexts} from './evidence';
+import {topicReaderComments} from './readers';
 import type {EditorialColumn,TopicRecommendation,TopicShareLanguage,TopicShareSource} from './types';
 
 /** Original comments remain usable when their saved English translation is missing. */
 export function usableTopicQuotes(source:TopicShareSource,language:TopicShareLanguage) {
+ const observed=topicReaderComments(source);
+ if(observed.length)return observed.map(quote=>({side:quote.side??'neutral' as const,quote,text:language==='en'?quote.englishText??quote.text:quote.text}));
  const examples=source.commentExamples??source.analysis?.commentExamples,battle=source.analysis?.battle;
  const en=visibleCommentQuotes(examples,battle,'en',{allowMixedEnglish:true});
  const zh=visibleCommentQuotes(examples,battle,'zh');
@@ -29,6 +32,7 @@ function topicKind(source:TopicShareSource){
 }
 type EditorialAudience={commentLanguage?:'en'|'zh'};
 function editorialQuotes(source:TopicShareSource,audience:EditorialAudience){
+ if(topicReaderComments(source).length)return usableTopicQuotes(source,audience.commentLanguage??'zh');
  if(audience.commentLanguage!=='en')return usableTopicQuotes(source,'zh');
  // The separate daily-English workflow retains its existing column selection.
  const examples=source.commentExamples??source.analysis?.commentExamples;

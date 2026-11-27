@@ -39,9 +39,11 @@ function text(value:unknown,path:string,max:number,language?:TopicShareLanguage,
 function localized(value:unknown,language:TopicShareLanguage,issues:TopicShareCopyIssue[],newsStyle=false):LocalizedTopicShare {
  const data=object(value??{},language);
  const checked=(value:unknown,path:string)=>{const limit=topicShareFieldLimit(path);return text(value,path,limit.maxChars,limit.language,limit.maxWords,issues);};
- fields(data,['headline','hook','summary','context','whyItMatters','question','posts','selectedPostId','replies','altText','article'],language);
+ fields(data,['headline','hook','summary','context','whyItMatters','question','posts','selectedPostId','replies','altText','article','attitudes'],language);
  const optional=(field:string)=>newsStyle&&(data[field]===undefined||data[field]===null||typeof data[field]==='string'&&!data[field].trim())?'':checked(data[field],language+'.'+field);
  let article:LocalizedTopicShare['article'];
+ let attitudes:LocalizedTopicShare['attitudes'];
+ if(data.attitudes!==undefined){const row=object(data.attitudes,language+'.attitudes');fields(row,['redLabel','blueLabel'],language+'.attitudes');attitudes={redLabel:text(row.redLabel,language+'.attitudes.redLabel',120,language,12,issues),blueLabel:text(row.blueLabel,language+'.attitudes.blueLabel',120,language,12,issues)};}
  if(data.article!==undefined){const row=object(data.article,language+'.article');fields(row,['title','body'],language+'.article');article={title:checked(row.title,language+'.article.title'),body:checked(row.body,language+'.article.body')};}
  else if(newsStyle)issues.push({path:language+'.article',code:'missing_text',message:'Companion article is missing; the cover draft is preserved'});
  if(data.posts===undefined||Array.isArray(data.posts)&&!data.posts.length)data.posts=[{id:`draft-${language}`,pattern:'context',text:'',reason:''}];
@@ -69,7 +71,7 @@ function localized(value:unknown,language:TopicShareLanguage,issues:TopicShareCo
   summary:checked(data.summary,language+'.summary'),context:optional('context'),
   whyItMatters:checked(data.whyItMatters,language+'.whyItMatters'),question:optional('question'),
   posts,selectedPostId,replies:data.replies.map((reply,index)=>checked(reply,`${language}.replies[${index}]`)),
-  altText:checked(data.altText,language+'.altText'),...(article?{article}:{})
+  altText:checked(data.altText,language+'.altText'),...(article?{article}:{}),...(attitudes?{attitudes}:{})
  };
 }
 function visibleTexts(copy:LocalizedTopicShare,language:TopicShareLanguage):Array<{path:string;body:string}>{
@@ -163,7 +165,7 @@ function unsupportedCommentClaim(body:string):boolean {
 function assessTopicShareCopy(value:unknown,source:TopicShareSource):{copy:TopicShareCopy;issues:TopicShareRepairIssue[]} {
  const data=object(value,'TopicShare');
  fields(data,['version','generatedAt','model','sourceFingerprint','column','en','zh','editorialPolicy'],'TopicShare');
- if(data.editorialPolicy!==undefined&&data.editorialPolicy!=='news-commentary-v1')throw new Error('Unknown editorial policy');
+ if(data.editorialPolicy!==undefined&&!['news-commentary-v1','news-commentary-v2'].includes(String(data.editorialPolicy)))throw new Error('Unknown editorial policy');
  if(data.version!==1)throw new Error('Unsupported topic share version');
  if(typeof data.sourceFingerprint!=='string'||data.sourceFingerprint!==source.fingerprint||!/^[a-f0-9]{64}$/.test(data.sourceFingerprint))throw new Error('Topic share source fingerprint changed');
  const generatedAt=text(data.generatedAt,'generatedAt',40),model=text(data.model,'model',200);
@@ -202,7 +204,7 @@ function assessTopicShareCopy(value:unknown,source:TopicShareSource):{copy:Topic
  }
  if(usableTopicQuotes(source,'zh').length>usableTopicQuotes(source,'en').length)copyIssues.push({path:'source.commentTranslation',code:'comment_translation',message:'Some source comments lack a usable English translation'});
  if(usableTopicQuotes(source,'en').some(item=>/\p{Script=Han}/u.test(item.text)))copyIssues.push({path:'source.commentTranslation',code:'language',message:'Stored English comment translation contains Chinese; preserved for administrator review'});
- return {copy:{version:1,generatedAt,model,sourceFingerprint:data.sourceFingerprint,column,en,zh,...(data.editorialPolicy?{editorialPolicy:'news-commentary-v1' as const}:{})},issues:[...copyIssues,
+ return {copy:{version:1,generatedAt,model,sourceFingerprint:data.sourceFingerprint,column,en,zh,...(data.editorialPolicy?{editorialPolicy:data.editorialPolicy as TopicShareCopy['editorialPolicy']}:{})},issues:[...copyIssues,
   ...numericalIssues.map(issue=>({...issue,code:'numerical' as const})),...commentIssues.map(issue=>({...issue,code:'comment_evidence' as const}))]};
 }
 

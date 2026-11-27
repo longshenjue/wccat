@@ -3,6 +3,8 @@ import type {TopicShareLanguage,TopicShareRecord} from './types';
 import {usableTopicQuotes} from './recommendation';
 import type {PublicationReference} from '../publications/types';
 import {publicationTextFiles} from '../publications/materials';
+import {topicShareReadiness} from './readiness';
+import {topicReaderComments} from './readers';
 export type TopicPublicationExport={reference:PublicationReference;origin:string};
 
 /** Only frozen, validated HTTP(S) citations enter a download. */
@@ -12,6 +14,7 @@ export function topicSourceHref(value:string):string|undefined {
 
 export function topicShareTextFiles(record:TopicShareRecord,publication?:TopicPublicationExport):ZipEntry[] {
  if(record.copy.sourceFingerprint!==record.source.fingerprint)throw new Error('分享来源版本不一致，请重新载入已保存稿。');
+ const readiness=topicShareReadiness(record);if(!readiness.ready)throw new Error(readiness.message);
  const files:Array<{name:string;text:string}>=[];
  for(const language of ['en','zh'] as const){
   const copy=record.copy[language],selected=copy.posts.find(post=>post.id===copy.selectedPostId)??copy.posts[0];
@@ -21,13 +24,14 @@ export function topicShareTextFiles(record:TopicShareRecord,publication?:TopicPu
  // Group caption/reply/alt files by purpose so the bilingual pair stays together.
  const ordered=['post-en.txt','post-zh.txt','replies-en.txt','replies-zh.txt','alt-en.txt','alt-zh.txt'].map(name=>files.find(file=>file.name===name)!);
  const source=record.source,quotes=usableTopicQuotes(source,'zh');
- for(const language of ['en','zh'] as const){const article=record.copy[language].article;if(article?.body)ordered.push({name:`article-${language}.md`,text:`# ${article.title}\n\n${article.body}\n\n## ${language==='en'?'Sources':'来源'}\n\n${(source.research?.documents??[]).map(doc=>`- [${doc.id}] ${doc.publisher} · ${doc.title}\n  ${doc.url}`).join('\n')}`});}
+ for(const language of ['en','zh'] as const){const article=record.copy[language].article;if(article?.body)ordered.push({name:`article-${language}.md`,text:`# ${article.title}\n\n${article.body}\n\n## ${language==='en'?'Sources':'来源'}\n\n${[...(source.research?.documents??[]).map(doc=>`- [${doc.id}] ${doc.publisher} · ${doc.title}\n  ${doc.url}`),...quotes.map(({quote})=>`- [${quote.id}] ${quote.sourceName} · ${language==='en'?'Original comment':'网友原话'}\n  ${quote.url}`)].join('\n')}`});}
  ordered.push({name:'sources.txt',text:[
   'WcCAT · Single story / 单话题',source.date,`Original title: ${source.title}`,`Source key: ${source.sourceKey}`,`Frozen source fingerprint: ${source.fingerprint}`,`Source ref: ${JSON.stringify(source.ref)}`,
   'Observed platform attention and selected comments are not a population survey. / 平台热度和评论摘选不代表总体民意。','',
   ...source.links.flatMap(link=>{const url=topicSourceHref(link.url);return url?[`${link.sourceName} · ${link.title}`,url]:[];}),
   ...(source.research?.documents??[]).flatMap(doc=>['',`[${doc.id}] ${doc.publisher} · ${doc.title}`,doc.url,...(doc.publishedAt?[`Published: ${doc.publishedAt}`]:[])]),
-  ...quotes.flatMap(({quote})=>['',`Comment ID: ${quote.id}`,`Source: ${quote.sourceName} · ${quote.url}`,`Likes: ${quote.likes??'not provided'}`,`Original: ${quote.text}`,...(quote.englishText?[`AI translation${quote.englishIsExcerpt?' (excerpt)':''}: ${quote.englishText}`]:[])])
+  ...(source.photo?['',`News image: ${source.photo.publisher}`,source.photo.sourceUrl,`Image source page: ${source.photo.pageUrl}`]:[]),
+  ...[...new Map([...quotes.map(({quote})=>quote),...topicReaderComments(source)].map(quote=>[quote.id,quote])).values()].flatMap(quote=>['',`Comment ID: ${quote.id}`,`Source: ${quote.sourceName} · ${quote.url}`,`Likes: ${quote.likes??'not provided'}`,`Original: ${quote.text}`,...(quote.englishText?[`AI translation${quote.englishIsExcerpt?' (excerpt)':''}: ${quote.englishText}`]:[])])
  ].join('\n')});
  ordered.push({name:'experiment-notes.txt',text:[
   'Editorial copy experiments; not a viral forecast or a guarantee of reach.',

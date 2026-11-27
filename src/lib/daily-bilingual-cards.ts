@@ -55,7 +55,7 @@ export function buildChineseDailyCards(report:DailyCardSource,copy:ShareEnCopy):
  const topics=report.topics.slice(0,10);
  const highlights=copy.highlights.map((highlight,index)=>{
   const topic=topics.find(topic=>topic.id===highlight.topicId)!;
-  return {...highlight,hook:topic.title.trim(),whatHappened:sourceText(topic,[topic.aiAnalysis?.detailedContent,topic.aiAnalysis?.summary,topic.oneLine,topic.whyItMatters]),context:[topic.aiAnalysis?.outsiderContext?.trim(),relatedDevelopmentText(topic)].filter(Boolean).join('\n\n'),whyItMatters:sourceText(topic,[topic.aiAnalysis?.outsiderContext,topic.whyItMatters,topic.aiAnalysis?.summary]),battle:getDailyCardBattle(report,copy,index+1,'zh')};
+  return {...highlight,hook:topic.title.trim(),whatHappened:sourceText(topic,[topic.aiAnalysis?.detailedContent,topic.aiAnalysis?.summary,topic.oneLine,topic.whyItMatters]),context:[topic.aiAnalysis?.outsiderContext?.trim(),relatedDevelopmentText(topic)].filter(Boolean).join('\n\n'),whyItMatters:topic.aiAnalysis?.editorialTake?.trim()||sourceText(topic,[topic.aiAnalysis?.outsiderContext,topic.whyItMatters,topic.aiAnalysis?.summary]),battle:getDailyCardBattle(report,copy,index+1,'zh')};
  });
  const top3=highlights.map(highlight=>{
   const topic=topics.find(topic=>topic.id===highlight.topicId)!;

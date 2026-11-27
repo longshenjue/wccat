@@ -57,6 +57,10 @@ export function withTopicShareResearch(source:TopicShareSource,research:TopicRes
  const {fingerprint,sourceKey:_,...material}=source;
  return finalize({...material,baseFingerprint:source.baseFingerprint??fingerprint,research});
 }
+export function withTopicShareAssets(source:TopicShareSource,assets:Pick<TopicShareSource,'photo'|'readerComments'|'assetWarnings'|'analysis'|'commentExamples'>):TopicShareSource {
+ const {fingerprint,sourceKey:_,...material}=source;
+ return finalize({...material,...assets,baseFingerprint:source.baseFingerprint??fingerprint});
+}
 export function loadTopicShareSource(value:unknown):TopicShareSource {
  const ref=parseTopicShareRef(value);
  try{
@@ -64,10 +68,11 @@ export function loadTopicShareSource(value:unknown):TopicShareSource {
    const detail=browseItem({snapshot:ref.snapshot,version:ref.version,key:ref.key});
    const topic=detail.kind==='topics'?detail.item as TopicGroup:undefined,raw=detail.kind==='raw'?detail.item as RawHotItem:undefined;
    const analysis=detail.analysis;
+   const coverOccurrence=raw?.cover?raw:topic?.occurrences.find(item=>item.cover);
    return finalize({ref,topicId:topic?.id??ref.key,date:ref.snapshot.slice(0,10),observedAt:detail.snapshot.generatedAt,title:text(detail.item.title,400),
     summary:text(analysis?.summary??topic?.summary.oneLine??raw?.description??detail.item.title,3000),detail:text(analysis?.detailedContent??raw?.description??'',12000),
     context:text(analysis?.outsiderContext??topic?.summary.context??'',5000),categories:topic?.categories??(raw?[raw.sourceCategory]:[]),rank:detail.item.rank,
-    signal:topic?.signal??'new',links:links(topic?.occurrences??(raw?[raw]:[])),analysis,commentExamples:analysis?.commentExamples,cover:safeTopicLink(raw?.cover??topic?.occurrences.find(o=>o.cover)?.cover)});
+    signal:topic?.signal??'new',links:links(topic?.occurrences??(raw?[raw]:[])),analysis,commentExamples:analysis?.commentExamples,cover:safeTopicLink(coverOccurrence?.cover),...(coverOccurrence?{coverAttribution:{pageUrl:coverOccurrence.url,publisher:coverOccurrence.sourceName}}:{})});
   }
   const result=dailyBrowse(ref.date);
   if(!result.report||!result.version)throw new TopicSharingError('该日期没有已保存日报。',404);
@@ -76,6 +81,6 @@ export function loadTopicShareSource(value:unknown):TopicShareSource {
   const analysis=topic.aiAnalysis as TopicAnalysis|undefined;
   return finalize({ref:{...ref,version:result.version.version},topicId:topic.id,date:ref.date,observedAt:result.report.generatedAt,title:text(topic.title,400),summary:text(analysis?.summary??topic.oneLine,3000),
    detail:text([analysis?.detailedContent,relatedDevelopmentText(topic)].filter(Boolean).join('\n\n'),12000),context:text(analysis?.outsiderContext??topic.whyItMatters,5000),categories:topic.categories,rank:topic.rank,signal:topic.signal,
-   links:links(dailyStoryLinks(topic),48),analysis,commentExamples:analysis?.commentExamples,cover:safeTopicLink(topic.cover)});
+   links:links(dailyStoryLinks(topic),48),research:topic.research,photo:topic.photo,readerComments:topic.readerComments,assetWarnings:topic.assetWarnings,analysis,commentExamples:analysis?.commentExamples,cover:safeTopicLink(topic.cover),coverAttribution:topic.coverAttribution});
  }catch(error){if(error instanceof BrowseError)throw new TopicSharingError(error.message,error.status);throw error;}
 }

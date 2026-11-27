@@ -1,3 +1,8 @@
+import {newsroomPrompt} from './newsroom/prompts';
+import {cleanGeneratedNewsValue} from './newsroom/prose';
+import {enrichDailyReporting} from './newsroom/daily-reporting';
+import type {TopicResearch} from './topic-sharing/research/types';
+import type {TopicPhoto,TopicReaderComment} from './topic-sharing/types';
 import { getChinaSnapshotId } from "./date";
 import {
   readDailyReportFromDb,
@@ -50,8 +55,10 @@ export type DailyReportTopic = {
   oneLine: string;
   whyItMatters: string;
   cover?: string;
+  coverAttribution?:{pageUrl:string;publisher:string};
   coverSourceId?: string;
   aiAnalysis?: TopicAnalysis;
+  research?:TopicResearch;photo?:TopicPhoto;readerComments?:TopicReaderComment[];assetWarnings?:string[];
   /** Distinct facts shown under one editorial storyline, not deduplicated away. */
   relatedDevelopments?: DailyReportTopic[];
   analysisSnapshotDate?: string;
@@ -140,6 +147,7 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
   reuseDailyComments({reportDate,windowStart:getChinaSnapshotId(start),windowEnd:getChinaSnapshotId(end),topics},previous);
   // Historical regeneration reuses frozen evidence rather than collecting today's comments.
   if(Date.now()-end.getTime()<36*3600_000){
+    await enrichDailyReporting(topics,reportDate,log);
     await enrichDailyComments(topics,log);
   }else log('info','历史日报沿用已保存评论证据，不重新抓取当前评论。');
   log('info', '正在生成中文日报稿件');
@@ -312,6 +320,7 @@ function toDailyReportTopic(bucket: TopicBucket, totalSamples: number, sampleWei
       "它在过去 24 小时持续出现在榜单中，适合作为日更内容的主线素材。",
     cover: coverOccurrence?.cover,
     coverSourceId: coverOccurrence?.sourceId,
+    ...(coverOccurrence?{coverAttribution:{pageUrl:coverOccurrence.url,publisher:coverOccurrence.sourceName}}:{}),
     analysisSnapshotDate: bucket.peakSnapshotDate,
     analysisTopicId: bucket.peakTopicId,
     links: uniqueLinks.map((item) => ({
@@ -394,6 +403,8 @@ async function generateDrafts(
                   oneLine: topic.oneLine,
                   whyItMatters: topic.whyItMatters,
                   summary:topic.aiAnalysis?.summary,
+                  detailedContent:topic.aiAnalysis?.detailedContent,
+                  currentReporting:topic.research?.documents.filter(doc=>doc.purpose==='event'),
                   relatedDevelopments:topic.relatedDevelopments?.map(stage=>({title:stage.title,summary:stage.aiAnalysis?.summary}))
                 }))
               },
@@ -419,7 +430,7 @@ async function generateDrafts(
       return fallback;
     }
 
-    const parsed = JSON.parse(content) as Partial<GeneratedDrafts>;
+    const parsed = cleanGeneratedNewsValue(JSON.parse(content)) as Partial<GeneratedDrafts>;
     const draftFields = ['headline','overview','wechatDraft','videoScript'] as const;
     const missingFields = draftFields.filter(field=>typeof parsed[field]!=='string'||!parsed[field]?.trim());
     if(missingFields.length) log('warn', `中文 AI 稿件字段不完整，以下字段使用 local-template：${missingFields.join('、')}`);
@@ -436,25 +447,7 @@ async function generateDrafts(
   }
 }
 
-function buildDailySystemPrompt() {
-  return `你是 WcCAT 的日更内容主编。请基于过去 24 小时中文互联网热点，生成可直接用于公众号和短视频的中文稿件。
-
-必须严格输出 JSON，不要输出 Markdown。字段如下：
-{
-  "headline": "24字以内的日报标题",
-  "overview": "120字以内的今日总览，解释注意力、情绪、冲突和共识",
-  "wechatDraft": "公众号文字稿，650-900字，包含开头、Top10简述、观察总结，不要编造事实",
-  "videoScript": "短视频口播稿，约90-150秒，包含开场钩子、10个话题快节奏串联、结尾观点"
-}
-
-规则：
-- 这是面向外国人理解中文互联网的内容，但第一版用中文写。
-- 不要写成热搜搬运，要解释“今天中文互联网在关心什么”。
-- 没有证据的事实不要补充；可以使用“从榜单信号看”。
-- sampleCount 是采样出现次数，sampleCoverage 是采样覆盖率；采样次数不等于持续小时数，不推断未观测时段。
-- window.complete 为 false 时是提前生成，只根据截至 observedUntil 的已有材料写作，不将其描述为全天最终结论。
-- 公众号稿要适合截图/排版，视频稿要适合抖音和 B 站口播。`;
-}
+function buildDailySystemPrompt() {return newsroomPrompt('daily');}
 
 function buildFallbackDrafts(
   reportDate: string,

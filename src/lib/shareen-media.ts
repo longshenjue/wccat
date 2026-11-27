@@ -32,6 +32,8 @@ export function shareEnSplitDisplay(asset:Pick<ShareEnImageAsset,'sourceWidth'|'
 
 /** Browser-safe cache selection. Never return private image bytes or trust an asset-provided URL. */
 export function shareEnImage(report:WccatDailyReport,copy:ShareEnCopy,index:number):ShareEnImage|undefined {
+ const item=copy.highlights[index-1],topic=item?report.topics.find(row=>row.id===item.topicId):undefined;
+ if(!item?.hideImage&&!item?.imageUrl?.trim()&&topic?.photo)return {url:topic.photo.sourceUrl,alt:topic.title,src:`data:image/webp;base64,${topic.photo.dataBase64}`,layout:'split',processed:true};
  const original=shareEnOriginalImage(report,copy,index);if(!original)return undefined;
  const highlight=copy.highlights[index-1];
  const asset=validateImageAsset(highlight.imageAsset);

@@ -70,17 +70,17 @@ test('DeepSeek generation is bounded, source-grounded and returns server-owned m
    let calls=0;const editable=await generateTopicShare(source(),{column:'voices',fetch:async()=>{calls++;return response({...content(),column:'voices'});}});assert.equal(editable.column,'voices');assert.equal(calls,1);
   });
   await t.test('response failures do not retry, silently fall back, or expose API credentials',async()=>{
-   for(const makeResponse of [
+   for(const [index,makeResponse] of [
     ()=>new Response('secret-service-detail',{status:503}),
     ()=>Response.json({choices:[{finish_reason:'length',message:{content:JSON.stringify(content())}}]}),
     ()=>Response.json({choices:[{message:{content:'not JSON'}}]}),
     ()=>Response.json({choices:[{message:{content:''}}]}),
     ()=>response({...content(),links:source().links}),
     ()=>response({...content(),generatedAt:'1900-01-01T00:00:00.000Z'})
-   ]){
+   ].entries()){
     let calls=0;const logs:string[]=[];
     await assert.rejects(generateTopicShare(source(),{fetch:async()=>{calls++;return makeResponse();},log:(_level,message)=>logs.push(message)}));
-    assert.equal(calls,1);assert.ok(!logs.join('').includes('topic-test-secret'));assert.ok(!logs.join('').includes('secret-service-detail'));
+    assert.equal(calls,index===2?2:1);assert.ok(!logs.join('').includes('topic-test-secret'));assert.ok(!logs.join('').includes('secret-service-detail'));
    }
   });
   await t.test('a timeout is reported after the single request and leaves the source unchanged',async()=>{

@@ -5,6 +5,7 @@ import {visibleCommentQuotes} from '../comments/selection';
 import {publicationLink,publicationHref} from './links';
 import {shareEnImage} from '../shareen-media';
 import {topicEvidenceTexts} from '../topic-sharing/evidence';
+import {topicReaderComments} from '../topic-sharing/readers';
 import type {CommentExamples} from '../comments/types';
 import type {PublicationComment,PublicationPayload} from './types';
 
@@ -17,9 +18,11 @@ const chosen=(local:TopicShareRecord['copy']['en'])=>(local.posts.find(post=>pos
 /** Whitelist published reader material; no admin notes, alternatives or model metadata. */
 export function topicPublication(record:TopicShareRecord):PublicationPayload {
  const {source,copy}=record;
+ const originals=topicReaderComments(source).length?topicReaderComments(source):visibleCommentQuotes(source.commentExamples??source.analysis?.commentExamples,source.analysis?.battle,'zh').map(row=>row.quote);
+ const commentLinks=originals.flatMap(quote=>{const safe=publicationLink({sourceId:quote.sourceId,sourceName:quote.sourceName,title:'Original comment',url:quote.url});return safe?[{...safe,kind:'post' as const,researchId:quote.id}]:[];});
  return {version:1,kind:source.ref.kind==='hourly'?'hourly':'topic',date:source.date,titles:{en:copy.en.headline||source.title,zh:copy.zh.headline||source.title},posts:{en:chosen(copy.en),zh:chosen(copy.zh)},cards:[{id:'story',rank:source.rank,selected:true,
   en:{title:copy.en.headline,summary:copy.en.summary,context:copy.en.context,why:copy.en.whyItMatters,...(copy.en.article?{article:{title:copy.en.article.title,body:copy.en.article.body}}:{})},zh:{title:copy.zh.headline,summary:copy.zh.summary,context:copy.zh.context,why:copy.zh.whyItMatters,...(copy.zh.article?{article:{title:copy.zh.article.title,body:copy.zh.article.body}}:{})},
-  links:[...source.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];}),...(source.research?.documents??[]).flatMap(doc=>{const safe=publicationLink({sourceId:'research',sourceName:doc.publisher,title:doc.title,url:doc.url});return safe?[{...safe,kind:'article' as const,researchId:doc.id}]:[];})],comments:comments(source.commentExamples??source.analysis?.commentExamples,source.analysis?.battle)}]};
+  links:[...source.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];}),...(source.research?.documents??[]).flatMap(doc=>{const safe=publicationLink({sourceId:'research',sourceName:doc.publisher,title:doc.title,url:doc.url});return safe?[{...safe,kind:'article' as const,researchId:doc.id}]:[];}),...commentLinks],comments:topicReaderComments(source).length?topicReaderComments(source).map(quote=>({side:quote.side??'neutral',sourceId:quote.sourceId,sourceName:quote.sourceName,url:quote.url,text:quote.text,englishText:quote.englishText,likes:quote.likes})):comments(source.commentExamples??source.analysis?.commentExamples,source.analysis?.battle),...(source.photo?{photo:{dataBase64:source.photo.dataBase64,width:source.photo.width,height:source.photo.height,publisher:source.photo.publisher,sourceUrl:source.photo.sourceUrl,pageUrl:source.photo.pageUrl}}:{})}]};
 }
 
 export function dailyPublication(report:WccatDailyReport):PublicationPayload {
@@ -31,6 +34,6 @@ export function dailyPublication(report:WccatDailyReport):PublicationPayload {
   const evidence=topicEvidenceTexts({title:topic.title,summary:topic.oneLine,context:topic.whyItMatters,analysis:topic.aiAnalysis});
   const focusIndex=english.highlights.findIndex(highlight=>highlight.topicId===topic.id),image=focusIndex<0?undefined:shareEnImage(report,english,focusIndex+1),imageUrl=image?publicationHref(image.url):undefined;
   return {id:`story-${index+1}`,rank:topic.rank,selected:!!en,en:{title:english.overview.topics.find(row=>row.id===topic.id)?.title??'',summary:en?.whatHappened??'',context:en?.context??'',why:en?.whyItMatters??''},zh:{title:topic.title,summary:zh?.whatHappened??evidence[0]??'',context:zh?.context??'',why:zh?.whyItMatters??''},
-   links:topic.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];}),comments:comments(topic.aiAnalysis?.commentExamples,topic.aiAnalysis?.battle),...(imageUrl?{imageUrl}:{}),...(topic.relatedDevelopments?.length?{relatedDevelopments:topic.relatedDevelopments.map(stage=>({title:stage.title,summary:stage.aiAnalysis?.summary??'',links:stage.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];})}))}:{})};
+   links:[...topic.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];}),...(topic.research?.documents??[]).flatMap(doc=>{const safe=publicationLink({sourceId:'research',sourceName:doc.publisher,title:doc.title,url:doc.url});return safe?[{...safe,kind:'article' as const,researchId:doc.id}]:[];})],comments:topicReaderComments(topic).length?topicReaderComments(topic).map(quote=>({side:quote.side??'neutral',sourceId:quote.sourceId,sourceName:quote.sourceName,url:quote.url,text:quote.text,englishText:quote.englishText,likes:quote.likes})):comments(topic.aiAnalysis?.commentExamples,topic.aiAnalysis?.battle),...(topic.photo&&image?.src.startsWith('data:')?{photo:{dataBase64:topic.photo.dataBase64,width:topic.photo.width,height:topic.photo.height,publisher:topic.photo.publisher,sourceUrl:topic.photo.sourceUrl,pageUrl:topic.photo.pageUrl}}:imageUrl?{imageUrl}:{}),...(topic.relatedDevelopments?.length?{relatedDevelopments:topic.relatedDevelopments.map(stage=>({title:stage.title,summary:stage.aiAnalysis?.summary??'',links:stage.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];})}))}:{})};
  })};
 }

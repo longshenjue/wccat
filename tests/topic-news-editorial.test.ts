@@ -46,7 +46,7 @@ test('the bilingual writing request distinguishes the brief from the researched 
    assert.match(JSON.stringify(payload.source.researchDocuments),/air, water and soil/);assert.ok(!system.includes('do not browse, research'));
    return Response.json({choices:[{message:{content:JSON.stringify({column:'inside',en:draft.en,zh:draft.zh})}}]});
   }});
-  assert.equal(calls,1,'one copy request, no editorial retry');assert.equal(copy.editorialPolicy,'news-commentary-v1');
+  assert.equal(calls,1,'one copy request, no editorial retry');assert.equal(copy.editorialPolicy,'news-commentary-v2');
   const warnings=prepareTopicShareDraft(copy,source).reviewWarnings;
   assert.ok(!warnings.some(w=>['en.hook','en.context','en.question','zh.hook','zh.context','zh.question'].includes(w.path)&&w.code==='missing_text'));
  }finally{if(oldKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=oldKey;}
@@ -55,4 +55,6 @@ test('the bilingual writing request distinguishes the brief from the researched 
 test('article rendering resolves only frozen source references and never executes raw HTML or model links',()=>{
  const markup=renderToStaticMarkup(createElement(ArticleText,{body:'## Status\n\nA monitoring statement. [r-epa]\n\n<script>alert(1)</script> [bad](javascript:alert(1))',sources:[{sourceId:'research',researchId:'r-epa',name:'EPA',title:'A monitoring update',url:'https://www.epa.gov/newsreleases/update',kind:'article'}]}));
  assert.match(markup,/href="#r-epa"/);assert.doesNotMatch(markup,/<script|href="javascript:/);assert.match(markup,/&lt;script&gt;/);
+ const quote=renderToStaticMarkup(createElement(ArticleText,{body:'One reader expressed caution. [qq-news:7532014236337559055]',sources:[{sourceId:'qq-news',researchId:'qq-news:7532014236337559055',name:'Tencent News',title:'Original comment',url:'https://new.qq.com/rain/a/20261127A0CXFH00',kind:'post'}]}));
+ assert.match(quote,/href="#qq-news:7532014236337559055"/);assert.doesNotMatch(quote,/>\[qq-news:7532014236337559055\]</);
 });

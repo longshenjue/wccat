@@ -49,16 +49,16 @@ export function researchPinnedLookup(address:Address):LookupFunction {
 function abortable<T>(promise:Promise<T>,signal:AbortSignal):Promise<T>{
  return new Promise((resolve,reject)=>{const abort=()=>reject(signal.reason);signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();promise.then(resolve,reject).finally(()=>signal.removeEventListener('abort',abort));});
 }
-export async function readResearchResponseText(response:Response,signal:AbortSignal,maxBytes:number):Promise<string>{
+async function responseBytes(response:Response,signal:AbortSignal,maxBytes:number):Promise<Buffer>{
  const length=Number(response.headers.get('content-length'));
  if(length>maxBytes){await response.body?.cancel();throw new Error('Research body limit');}
  const reader=response.body?.getReader();if(!reader)throw new Error('Missing research body');
  let bytes=0;const chunks:Uint8Array[]=[];
- try{for(;;){signal.throwIfAborted();const next=await abortable(reader.read(),signal);if(next.done)break;bytes+=next.value.byteLength;if(bytes>maxBytes){void reader.cancel().catch(()=>{});throw new Error('Research body limit');}chunks.push(next.value);}return Buffer.concat(chunks).toString('utf8');}
+ try{for(;;){signal.throwIfAborted();const next=await abortable(reader.read(),signal);if(next.done)break;bytes+=next.value.byteLength;if(bytes>maxBytes){void reader.cancel().catch(()=>{});throw new Error('Research body limit');}chunks.push(next.value);}return Buffer.concat(chunks);}
  catch(error){void reader.cancel().catch(()=>{});throw error;}
  finally{reader.releaseLock();}
 }
-export async function readPublicResearchText(value:string,options:Options={}):Promise<ResearchRead>{
+async function readResource(value:string,options:Options,images:boolean){
  let url=safeResearchUrl(value);const signal=AbortSignal.any([AbortSignal.timeout(8000),...(options.signal?[options.signal]:[])]);
  for(let redirects=0;redirects<=2;redirects++){
   signal.throwIfAborted();options.onRequest?.();
@@ -68,8 +68,12 @@ export async function readPublicResearchText(value:string,options:Options={}):Pr
   if(response.status>=300&&response.status<400){const target=response.headers.get('location');await response.body?.cancel();if(!target||redirects===2)throw new Error('Research redirect limit');url=safeResearchUrl(new URL(target,url).href);continue;}
   if(!response.ok){await response.body?.cancel();throw new Error(`Research HTTP ${response.status}`);}
   const contentType=response.headers.get('content-type')?.split(';')[0]??'text/html';
-  if(!['text/html','application/xhtml+xml','application/xml','text/xml','text/plain','application/json'].includes(contentType)){await response.body?.cancel();throw new Error('Unsupported research content');}
-  return {url:url.href,text:await readResearchResponseText(response,signal,Math.min(1_000_000,options.maxBytes??200_000)),contentType};
+  if(!(images?['image/jpeg','image/png','image/webp','image/avif']:['text/html','application/xhtml+xml','application/xml','text/xml','text/plain','application/json']).includes(contentType)){await response.body?.cancel();throw new Error('Unsupported research content');}
+  return {url:url.href,bytes:await responseBytes(response,signal,Math.min(images?4_000_000:1_000_000,options.maxBytes??(images?4_000_000:200_000))),contentType};
  }
  throw new Error('Research redirect limit');
 }
+
+export async function readResearchResponseText(response:Response,signal:AbortSignal,maxBytes:number):Promise<string>{return (await responseBytes(response,signal,maxBytes)).toString('utf8');}
+export async function readPublicResearchText(value:string,options:Options={}):Promise<ResearchRead>{const r=await readResource(value,options,false);return {url:r.url,text:r.bytes.toString('utf8'),contentType:r.contentType};}
+export async function readPublicResearchImage(value:string,options:Options={}):Promise<Buffer>{return (await readResource(value,options,true)).bytes;}

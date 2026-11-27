@@ -1,7 +1,7 @@
 import type {TopicShareLanguage} from './types';
 
 export const TOPIC_SHARE_POST_PATTERNS=['specific_observation','source_voice','number_context','bounded_counterpoint','culture_translation','sourced_update','context','uncertainty','editorial_take'] as const;
-export const TOPIC_NEWS_POLICY='news-commentary-v1' as const;
+export const TOPIC_NEWS_POLICY='news-commentary-v2' as const;
 export type TopicTextLimit={maxChars:number;maxWords?:number};
 export const TOPIC_SHARE_CONTRACT={
  postCount:3,maxReplies:4,
@@ -15,6 +15,7 @@ export function topicShareFieldLimit(path:string):TopicTextLimit&{language?:Topi
  if(language!=='en'&&language!=='zh')throw new Error('Unknown public copy field');
  const limits=TOPIC_SHARE_CONTRACT[language];
  if(field==='article')return path.endsWith('.title')?{maxChars:220,language}:{maxChars:14000,maxWords:language==='en'?1600:undefined,language};
+ if(field==='attitudes')return {maxChars:120,maxWords:language==='en'?12:undefined,language};
  if(/^posts\[\d+\]$/u.test(field)){
   if(path.endsWith('.text'))return {...limits.post,language};
   if(path.endsWith('.reason'))return {...limits.reason};

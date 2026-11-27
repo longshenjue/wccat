@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {getDb,readDailyReportFromDb} from '../db';
 import {guardedWrite,readGeneration} from '../maintenance';
 import {readTopicShare} from '../topic-sharing/store';
+import {topicShareReadiness} from '../topic-sharing/readiness';
 import {shareEnRevision,sourceFingerprint} from '../shareen';
 import {AdminError} from '../admin-auth';
 import {validateShareEnStructure} from '../shareen-validation';
@@ -15,6 +16,7 @@ export function preparePublication(input:PublicationRequest):PublicationReferenc
   let payload:PublicationPayload;
   if(input.kind==='topic'){
    const record=readTopicShare(input.id);if(!record)throw new AdminError('分享稿不存在。',404);
+   const readiness=topicShareReadiness(record);if(!readiness.ready)throw new AdminError(readiness.message,400);
    if(record.revision!==input.expectedRevision)throw new AdminError('分享版本已更新，请保存或载入最新版本后准备发布。',409);
    payload=topicPublication(record);
   }else{
