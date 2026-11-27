@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getChinaDateTime } from "@/lib/date";
 import { InsightImage } from "@/components/insight-image";
 import {CommentQuotes} from './comment-quotes';
+import {RelatedDevelopments} from './related-developments';
 import type { DailyReportTopic, WccatDailyReport } from "@/lib/daily-report";
 import { sentimentLabel } from "@/lib/sentiment";
 
@@ -141,6 +142,7 @@ function DailyTopicCard({
           <span className={`signal daily-signal ${topic.signal}`}>{signalLabels[topic.signal]}</span>
         </div>
         <p>{topic.oneLine}</p>
+        <div onClick={event=>event.stopPropagation()}><RelatedDevelopments developments={(topic.relatedDevelopments??[]).map(stage=>({title:stage.title,summary:stage.aiAnalysis?.summary,links:stage.links.map(link=>({name:link.sourceName,url:link.url}))}))}/></div>
         <div className="topic-meta daily-topic-meta">
           <span>{sentimentLabel(topic.sentiment)}</span>
           <span>采样 {topic.sampleCount ?? topic.activeHours} 次</span>

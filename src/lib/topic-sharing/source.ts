@@ -4,6 +4,7 @@ import {sanitizeEvidence} from '../evidence-content';
 import type {TopicGroup,RawHotItem} from '../types';
 import type {TopicAnalysis} from '../topic-analysis';
 import type {TopicShareRef,TopicShareSource,TopicShareLink} from './types';
+import {relatedDevelopmentText,dailyStoryLinks} from '../daily-story-selection';
 
 export class TopicSharingError extends Error {constructor(message:string,readonly status=400){super(message);}}
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
@@ -30,9 +31,9 @@ export function safeTopicLink(value:unknown):string|undefined {
  if(typeof value!=='string'||value.length>4096)return;
  try{const url=new URL(value);if(url.protocol==='https:'&&!url.username&&!url.password&&!url.port&&!/^(?:localhost|127\.|0\.|\[|169\.254\.)/i.test(url.hostname))return url.toString();}catch{return;}
 }
-function links(values:Array<{sourceId:string;sourceName:string;title:string;url:string}>):TopicShareLink[]{
+function links(values:Array<{sourceId:string;sourceName:string;title:string;url:string}>,limit=20):TopicShareLink[]{
  const unique=new Map<string,TopicShareLink>();
- for(const row of values.slice(0,40)){const url=safeTopicLink(row.url);if(url&&!unique.has(url))unique.set(url,{sourceId:text(row.sourceId,100),sourceName:text(row.sourceName,100),title:text(row.title,400),url});if(unique.size===20)break;}
+ for(const row of values.slice(0,Math.max(40,limit))){const url=safeTopicLink(row.url);if(url&&!unique.has(url))unique.set(url,{sourceId:text(row.sourceId,100),sourceName:text(row.sourceName,100),title:text(row.title,400),url});if(unique.size===limit)break;}
  return [...unique.values()];
 }
 function finalize(value:Omit<TopicShareSource,'fingerprint'|'sourceKey'>):TopicShareSource {
@@ -69,7 +70,7 @@ export function loadTopicShareSource(value:unknown):TopicShareSource {
   const topic=result.report.topics.find(row=>row.id===ref.topicId);if(!topic)throw new TopicSharingError('日报话题不存在。',404);
   const analysis=topic.aiAnalysis as TopicAnalysis|undefined;
   return finalize({ref:{...ref,version:result.version.version},topicId:topic.id,date:ref.date,observedAt:result.report.generatedAt,title:text(topic.title,400),summary:text(analysis?.summary??topic.oneLine,3000),
-   detail:text(analysis?.detailedContent??'',12000),context:text(analysis?.outsiderContext??topic.whyItMatters,5000),categories:topic.categories,rank:topic.rank,signal:topic.signal,
-   links:links(topic.links),analysis,commentExamples:analysis?.commentExamples,cover:safeTopicLink(topic.cover)});
+   detail:text([analysis?.detailedContent,relatedDevelopmentText(topic)].filter(Boolean).join('\n\n'),12000),context:text(analysis?.outsiderContext??topic.whyItMatters,5000),categories:topic.categories,rank:topic.rank,signal:topic.signal,
+   links:links(dailyStoryLinks(topic),48),analysis,commentExamples:analysis?.commentExamples,cover:safeTopicLink(topic.cover)});
  }catch(error){if(error instanceof BrowseError)throw new TopicSharingError(error.message,error.status);throw error;}
 }

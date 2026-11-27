@@ -247,6 +247,8 @@ export function AdminSharingPanel({date,revision,disabled,onDateChange,onGenerat
   {loaded.key===key&&loaded.error?<p className="data-error" role="alert">{loaded.error}</p>:null}
   {!loading&&!loaded.error&&!report?<p className="admin-sharing-empty">该日期还没有日报，请先在「日报生成」中生成。</p>:null}
   {report?<>
+   {report.storySelection?.mode==='fallback'?<p className="data-warning" role="status">本期主线归组未完成，当前保留原热榜。请检查是否有多个条目围绕同一件事；此提示不影响编辑或下载。</p>:null}
+   {!report.storySelection&&report.topics.length>1?<p className="data-muted">此历史稿尚未应用新闻主线归组。若要调整重复选题，请重新生成日报；仅重新下载或重生成分享不会更新原榜。</p>:null}
    <div className="admin-sharing-status"><span className="data-badge ready">中文已就绪</span><span className={`data-badge ${report.shareEnglish?'ready':'partial'}`}>English {report.shareEnglish?'已就绪':'待生成'}</span><span className={`data-badge ${report.shareEn?'ready':'partial'}`}>ShareEn {report.shareEn?'文案已保存':'待生成'}</span></div>
    <div className="admin-sharing-actions"><SharingGenerationButton busy={busy} dirty={dirty} onClick={()=>generate('all',false)}>补齐 English / ShareEn</SharingGenerationButton>{report.shareEnglish||report.shareEn?<SharingGenerationButton busy={busy} dirty={dirty} onClick={()=>generate('all',true)}>重新生成 English + ShareEn · AI</SharingGenerationButton>:null}</div>
    <div className="admin-sharing-tabs" role="tablist" aria-label="分享格式">{([['shareen','中英双语 · 多图'],['zh','中文长图 · 旧版'],['en','English 长图 · 旧版']] as const).map(([id,label])=><button type="button" key={id} role="tab" id={`sharing-tab-${id}`} aria-selected={tab===id} aria-controls="sharing-format-content" disabled={Boolean(exporting)||preparingExport} onClick={()=>{setTab(id);setMessage('');}}>{label}</button>)}</div>

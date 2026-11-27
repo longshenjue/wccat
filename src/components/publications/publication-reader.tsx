@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type {Publication,PublicationLanguage} from '../../lib/publications/types';
 import {publicationReference} from '../../lib/publications/store';
 import {publicationLinkLabel,publicationSourceName} from '../../lib/publications/links';
+import {RelatedDevelopments} from '../related-developments';
 
 export function PublicationBrand(){return <strong className="publication-brand"><span>Wc</span><span>CAT</span></strong>;}
 export function PublicationReader({publication,language}:{publication:Publication;language:PublicationLanguage}){
@@ -15,6 +16,7 @@ export function PublicationReader({publication,language}:{publication:Publicatio
    {copy.summary?<section><h3>{en?'What happened':'发生了什么'}</h3><p>{copy.summary}</p></section>:null}
    {copy.context?<section><h3>{en?'The context':'理解背景'}</h3><p>{copy.context}</p></section>:null}
    {copy.why?<section><h3>{en?'Why it matters':'为什么值得关注'}</h3><p>{copy.why}</p></section>:null}
+   <RelatedDevelopments english={en} developments={(card.relatedDevelopments??[]).map(stage=>({title:stage.title,summary:stage.summary,links:stage.links.map(link=>({url:link.url,name:publicationSourceName(link,language)}))}))}/>
    {card.comments.length?<section className="publication-comments"><h3>{en?'In their words':'用户怎么说'}</h3><p className="publication-note">{en?'Individual comments, not a poll or a representative view.':'以下为个人评论，不代表民调或总体意见。'}</p>{card.comments.map((comment,index)=><figure key={index} className={`publication-comment publication-comment-${comment.side}`}>
     <figcaption><a href={comment.url} target="_blank" rel="noopener noreferrer">{publicationSourceName({sourceId:comment.sourceId,name:comment.sourceName},language)} ↗</a>{comment.likes!==undefined?<span>{comment.likes.toLocaleString(en?'en-US':'zh-CN')} {en?'observed likes':'赞'}</span>:null}</figcaption>
     <small>{en?'Original Chinese':'中文原文'}</small><blockquote>{comment.text}</blockquote>{en&&comment.englishText?<><small>AI translation{comment.englishIsExcerpt?' · source excerpt':''}</small><blockquote>{comment.englishText}</blockquote></>:en?<p className="publication-note">English translation unavailable; the original is preserved.</p>:null}

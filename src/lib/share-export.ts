@@ -67,7 +67,8 @@ export function shareEnTextFiles(report: WccatDailyReport, englishCopy: ShareEnC
    en?'Observed platform ranking signals, not a population survey or independently verified reporting.':'内容来自已保存日报与平台榜单。榜单信号与 AI 情绪能量不代表民调或独立核实报道。',
    '', ...report.topics.slice(0,10).flatMap(topic=>[
     `${en?'Original rank':'原榜'} #${topic.rank}: ${topic.title}`,
-    ...topic.links.map(link=>`${link.sourceName}: ${link.url}`), ''
+    ...topic.links.map(link=>`${link.sourceName}: ${link.url}`), '',
+    ...(topic.relatedDevelopments??[]).flatMap(stage=>[`${en?'Related development (separate fact)':'同一主线的其他进展（独立事实）'}: ${stage.title}`,...stage.links.map(link=>`${link.sourceName}: ${link.url}`),''])
    ]),
    en?'Focus card image URLs:':'精选详情卡配图 URL：',...(copy.highlights??[]).map((_,index)=>{const image=shareEnImage(report,copy,index+1);return `${en?'Card':'卡片'} ${String(index+2).padStart(2,'0')}: ${image?.url??(copy.highlights[index].hideImage?(en?'Image hidden by administrator':'管理员已隐藏配图'):(en?'No approved image available':'无可用的已审核配图'))}`;}),
    en?'Focus card debate energy:':'精选详情卡 AI 相对情绪能量：',...(copy.highlights??[]).map((h,index)=>{const battle=getDailyCardBattle(report,copy,index+1,language);return `${en?'Original rank':'原榜'} #${report.topics.find(t=>t.id===h.topicId)?.rank??'?'}: ${battle?`${battle.redLabel} ${battle.redScore} ${en?'vs':'对'} ${battle.blueLabel} ${battle.blueScore} (${en?(battle.basis==='analysis'?'existing analysis':'AI estimate'):'来源分析'}; ${en?'relative energy, not a poll':'相对能量，非民调'})`:(en?'Attitude analysis unavailable':'无可用情绪分析')}`;}),

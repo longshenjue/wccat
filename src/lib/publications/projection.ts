@@ -31,6 +31,6 @@ export function dailyPublication(report:WccatDailyReport):PublicationPayload {
   const evidence=topicEvidenceTexts({title:topic.title,summary:topic.oneLine,context:topic.whyItMatters,analysis:topic.aiAnalysis});
   const focusIndex=english.highlights.findIndex(highlight=>highlight.topicId===topic.id),image=focusIndex<0?undefined:shareEnImage(report,english,focusIndex+1),imageUrl=image?publicationHref(image.url):undefined;
   return {id:`story-${index+1}`,rank:topic.rank,selected:!!en,en:{title:english.overview.topics.find(row=>row.id===topic.id)?.title??'',summary:en?.whatHappened??'',context:en?.context??'',why:en?.whyItMatters??''},zh:{title:topic.title,summary:zh?.whatHappened??evidence[0]??'',context:zh?.context??'',why:zh?.whyItMatters??''},
-   links:topic.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];}),comments:comments(topic.aiAnalysis?.commentExamples,topic.aiAnalysis?.battle),...(imageUrl?{imageUrl}:{})};
+   links:topic.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];}),comments:comments(topic.aiAnalysis?.commentExamples,topic.aiAnalysis?.battle),...(imageUrl?{imageUrl}:{}),...(topic.relatedDevelopments?.length?{relatedDevelopments:topic.relatedDevelopments.map(stage=>({title:stage.title,summary:stage.aiAnalysis?.summary??'',links:stage.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];})}))}:{})};
  })};
 }

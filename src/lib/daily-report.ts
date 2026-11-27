@@ -28,6 +28,8 @@ import type { DailySnapshot, Sentiment, TopicGroup, TopicOccurrence } from "./ty
 import {dailyCoverageSlot,dailyFactPeaks,dailyPlatformRank,dailyRankingEvidence,selectDailyCandidates,type DailyRankingEvidence,type DailyRankingObservation} from './daily-ranking';
 import {getSourceById} from './sources';
 import {platformItemKey,scorePlatformItems} from './platform-ranking';
+import {planDailyStories} from './daily-story-planner';
+import type {DailyStorySelection} from './daily-story-selection';
 
 export type DailyReportTopic = {
   id: string;
@@ -50,6 +52,8 @@ export type DailyReportTopic = {
   cover?: string;
   coverSourceId?: string;
   aiAnalysis?: TopicAnalysis;
+  /** Distinct facts shown under one editorial storyline, not deduplicated away. */
+  relatedDevelopments?: DailyReportTopic[];
   analysisSnapshotDate?: string;
   analysisTopicId?: string;
   links: Array<{
@@ -73,6 +77,7 @@ export type WccatDailyReport = {
   model: string;
   shareEnglish?: DailyShareCopy;
   shareEn?: ShareEnCopy;
+  storySelection?: DailyStorySelection;
   collection?: {observedUntil:string;complete:boolean;sampleCount:number;firstCollectedAt?:string;lastCollectedAt?:string};
 };
 
@@ -108,7 +113,9 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
   }
   const coverageIds=new Set(['weibo','baidu','douyin','toutiao',...sourceCoverage.keys()]);
   log('info',`来源覆盖：${[...coverageIds].map(id=>`${getSourceById(id)?.displayName??id} ${sourceCoverage.get(id)?.size??0}/${snapshots.length}`).join('；')}`);
-  const topics = buildDailyTopTopics(snapshots,date=>analyses[date]??{}).slice(0, 10);
+  const candidates = buildDailyCandidateTopics(snapshots,date=>analyses[date]??{});
+  // Keep the full pool until editorial grouping has freed and refilled its slots.
+  const {topics,selection:storySelection}=await planDailyStories(candidates,log);
   const previous=readDailyReportFromDb(reportDate);
   if(options.requireData && (!snapshots.length || !topics.length)) throw new Error('该统计窗口没有有效快照或话题，已有日报保持不变。');
   if(snapshots.length&&!topics.length)throw new Error('该窗口缺少符合综合日报规则的话题，已有日报保持不变。');
@@ -146,6 +153,7 @@ export async function generateDailyReport(inputDate = new Date(), options: {requ
     windowStart: getChinaSnapshotId(start),
     windowEnd: getChinaSnapshotId(end),
     topics,
+    storySelection,
     collection,
     ...drafts
   };
@@ -182,6 +190,10 @@ export function getDailyReport(reportDate?: string) {
 }
 
 export function buildDailyTopTopics(snapshots: DailySnapshot[],analysisReader=readTopicAnalysesForDate) {
+  return buildDailyCandidateTopics(snapshots,analysisReader).slice(0,10);
+}
+
+export function buildDailyCandidateTopics(snapshots: DailySnapshot[],analysisReader=readTopicAnalysesForDate) {
   const observations:Array<{snapshotDate:string;topic:TopicGroup;occurrence:TopicOccurrence;analysisEligible:boolean}>=[];
   const snapshotDates = [...new Set(snapshots.map(snapshot => snapshot.date))].sort();
   // Normalize persistence weighting for hourly legacy data and four-hour samples.
@@ -259,7 +271,7 @@ export function buildDailyTopTopics(snapshots: DailySnapshot[],analysisReader=re
 
   return selectDailyCandidates(buckets
     .map(bucket => toDailyReportTopic(bucket, snapshotDates.length, sampleWeight,totalSlots,availableBySource))
-    .filter((topic):topic is DailyReportTopic=>topic!==null))
+    .filter((topic):topic is DailyReportTopic=>topic!==null),buckets.length)
     .map((topic) => attachTopicAnalysis(topic, analysisCache,analysisReader))
     .sort((left, right) => right.dailyScore - left.dailyScore)
     .map((topic, index) => ({ ...topic, rank: index + 1 }));
@@ -380,7 +392,9 @@ async function generateDrafts(
                   sources: topic.sources,
                   sentiment: sentimentLabel(topic.sentiment),
                   oneLine: topic.oneLine,
-                  whyItMatters: topic.whyItMatters
+                  whyItMatters: topic.whyItMatters,
+                  summary:topic.aiAnalysis?.summary,
+                  relatedDevelopments:topic.relatedDevelopments?.map(stage=>({title:stage.title,summary:stage.aiAnalysis?.summary}))
                 }))
               },
               null,

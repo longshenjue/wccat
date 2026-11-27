@@ -3,6 +3,7 @@ import type {ShareLanguage} from './daily-share-copy';
 import type {ShareEnBattle,ShareEnCopy} from './shareen-types';
 import {getShareEnBattle} from './shareen-battle';
 import {topicEvidenceTexts} from './topic-sharing/evidence';
+import {relatedDevelopmentText,dailyStoryEvidence} from './daily-story-selection';
 
 /** Server-computed transport identity; imported or saved values are never authoritative. */
 export type DailyCardSource=WccatDailyReport&{sharingSourceFingerprint?:string};
@@ -23,7 +24,7 @@ export function assertDailyCardSource(report:DailyCardSource,copy:ShareEnCopy):v
  if(new Set(ids).size!==ids.length||ids.some(id=>!topics.some(topic=>topic.id===id)))throw new Error('中文卡片无法对应英文精选话题，请重新载入同一日报的分享稿。');
  for(const id of ids){
   const topic=topics.find(topic=>topic.id===id)!;
-  if(!topic.title?.trim()||!topicEvidenceTexts({title:topic.title,summary:topic.oneLine,context:topic.whyItMatters,analysis:topic.aiAnalysis}).length)throw new Error('所选话题缺少已保存的中文说明，请先补齐日报后重试。');
+  if(!topic.title?.trim()||!dailyStoryEvidence(topic).length)throw new Error('所选话题缺少已保存的中文说明，请先补齐日报后重试。');
  }
 }
 
@@ -41,7 +42,11 @@ export function getDailyCardBattle(report:WccatDailyReport,copy:ShareEnCopy,inde
 
 function sourceText(topic:DailyReportTopic,candidates:Array<string|undefined>):string {
  const evidence=topicEvidenceTexts({title:topic.title,summary:topic.oneLine,context:topic.whyItMatters,analysis:topic.aiAnalysis});
- return candidates.find((value):value is string=>typeof value==='string'&&evidence.includes(value.trim()))?.trim()??evidence[0]??'';
+ if(evidence.length)return candidates.find((value):value is string=>typeof value==='string'&&evidence.includes(value.trim()))?.trim()??evidence[0];
+ const related=dailyStoryEvidence(topic)[0];
+ if(!related)return '';
+ const text=[related.topic.aiAnalysis?.detailedContent,related.topic.aiAnalysis?.summary,...related.texts].find(value=>value&&related.texts.includes(value))!;
+ return `${related.topic.title}：${text}`;
 }
 
 /** A companion view, never submitted to English-only validators or persisted as English copy. */
@@ -50,7 +55,7 @@ export function buildChineseDailyCards(report:DailyCardSource,copy:ShareEnCopy):
  const topics=report.topics.slice(0,10);
  const highlights=copy.highlights.map((highlight,index)=>{
   const topic=topics.find(topic=>topic.id===highlight.topicId)!;
-  return {...highlight,hook:topic.title.trim(),whatHappened:sourceText(topic,[topic.aiAnalysis?.detailedContent,topic.aiAnalysis?.summary,topic.oneLine,topic.whyItMatters]),context:topic.aiAnalysis?.outsiderContext?.trim()??'',whyItMatters:sourceText(topic,[topic.aiAnalysis?.outsiderContext,topic.whyItMatters,topic.aiAnalysis?.summary]),battle:getDailyCardBattle(report,copy,index+1,'zh')};
+  return {...highlight,hook:topic.title.trim(),whatHappened:sourceText(topic,[topic.aiAnalysis?.detailedContent,topic.aiAnalysis?.summary,topic.oneLine,topic.whyItMatters]),context:[topic.aiAnalysis?.outsiderContext?.trim(),relatedDevelopmentText(topic)].filter(Boolean).join('\n\n'),whyItMatters:sourceText(topic,[topic.aiAnalysis?.outsiderContext,topic.whyItMatters,topic.aiAnalysis?.summary]),battle:getDailyCardBattle(report,copy,index+1,'zh')};
  });
  const top3=highlights.map(highlight=>{
   const topic=topics.find(topic=>topic.id===highlight.topicId)!;

@@ -6,7 +6,7 @@ import {recommendTopic,eligibleColumns} from './topic-sharing/recommendation';
 import {columnForLanguage} from './topic-sharing/columns';
 import type {TopicShareSource} from './topic-sharing/types';
 import {shareEnOverviewAltText} from './shareen-overview';
-import {topicEvidenceTexts} from './topic-sharing/evidence';
+import {relatedDevelopmentText,dailyStoryLinks,dailyStoryEvidence} from './daily-story-selection';
 
 type Fields=Record<string,unknown>;
 export type ShareEnDraftState={layout?:'editorial';topics:Record<string,Fields>;highlightIds:unknown;posts:unknown;selectedPostId:unknown;top3:unknown};
@@ -22,11 +22,11 @@ const originalTopics=(report:WccatDailyReport)=>report.topics.slice(0,10);
 export function shareEnEditorialSource(report:WccatDailyReport,topicId:string):TopicShareSource {
  const topic=originalTopics(report).find(t=>t.id===topicId);
  if(!topic)throw new Error('Unknown editorial topic identity');
- return {ref:{kind:'daily',date:report.reportDate,topicId},sourceKey:topicId,fingerprint:'',date:report.reportDate,observedAt:report.generatedAt,topicId,title:topic.title,summary:topic.oneLine,detail:topic.aiAnalysis?.detailedContent??'',context:topic.aiAnalysis?.outsiderContext??topic.whyItMatters,categories:topic.categories,rank:topic.rank,signal:topic.signal,links:topic.links,analysis:topic.aiAnalysis};
+ return {ref:{kind:'daily',date:report.reportDate,topicId},sourceKey:topicId,fingerprint:'',date:report.reportDate,observedAt:report.generatedAt,topicId,title:topic.title,summary:topic.oneLine,detail:[topic.aiAnalysis?.detailedContent,relatedDevelopmentText(topic)].filter(Boolean).join('\n\n'),context:topic.aiAnalysis?.outsiderContext??topic.whyItMatters,categories:topic.categories,rank:topic.rank,signal:topic.signal,links:dailyStoryLinks(topic),analysis:topic.aiAnalysis};
 }
 /** A ranking headline alone cannot support an explanatory story card. */
 export function shareEnSupportedTopicIds(report:WccatDailyReport):string[] {
- return originalTopics(report).filter(topic=>topicEvidenceTexts({title:topic.title,summary:topic.oneLine,context:topic.whyItMatters,analysis:topic.aiAnalysis}).length>0).map(topic=>topic.id);
+ return originalTopics(report).filter(topic=>dailyStoryEvidence(topic).length>0).map(topic=>topic.id);
 }
 export function validShareEnHighlightIds(ids:unknown,report:WccatDailyReport,editorial=false):ids is string[] {
  const allowed=editorial?shareEnSupportedTopicIds(report):originalTopics(report).map(t=>t.id);

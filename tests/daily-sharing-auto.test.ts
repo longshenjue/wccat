@@ -25,6 +25,7 @@ test('daily generation saves aligned focus captions and repaired emotional strip
   globalThis.fetch=async(_url,init)=>{
    if(!init?.body){phases.push('photo');photoUrls.push(String(_url));return new Response(new Uint8Array(png),{headers:{'content-type':'image/png'}});}
    const body=JSON.parse(String(init.body));
+   if(body.max_tokens===2200){phases.push('editorial');return Response.json({choices:[{message:{content:'{"groups":[]}'}}]});}
    if(body.max_tokens===1600){phases.push('vision');return new Response('',{status:503});}
    if(body.max_tokens===6500){
     const request=JSON.parse(body.messages[1].content);
@@ -47,7 +48,8 @@ test('daily generation saves aligned focus captions and repaired emotional strip
   };
   const {generateDailyReport}=await import('../src/lib/daily-report');
   const daily=await generateDailyReport(new Date('2025-11-14T02:00:00+08:00'));
-  assert.deepEqual(phases,['chinese','english','shareen','shareen-repair','photo','vision']);
+  assert.deepEqual(phases,['editorial','chinese','english','shareen','shareen-repair','photo','vision']);
+  assert.equal(daily.storySelection?.mode,'semantic');
   assert.equal(daily.reportDate,'2025-11-13');assert.ok(daily.shareEnglish);assert.ok(daily.shareEn);
   const saved=db.readDailyReportFromDb('2025-11-13')!;
   assert.equal(saved.shareEn?.highlights.length,3);assert.equal(saved.headline,'中文日报');
