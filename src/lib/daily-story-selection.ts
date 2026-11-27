@@ -48,6 +48,11 @@ export function dailyStoryEvidence(topic:DailyReportTopic){
  return [topic,...topic.relatedDevelopments??[]].map(stage=>({topic:stage,texts:topicEvidenceTexts({title:stage.title,summary:stage.oneLine,context:stage.whyItMatters,analysis:stage.aiAnalysis})})).filter(stage=>stage.texts.length>0);
 }
 
+/** Research backfill and final card selection must count the same supported stories. */
+export function supportsDailyStoryHighlight(topic:DailyReportTopic,currentReporting=false):boolean {
+ return dailyStoryEvidence(topic).length>0&&(!currentReporting||!!topic.research?.documents.some(doc=>doc.purpose==='event'));
+}
+
 export function dailyStoryLinks(topic:DailyReportTopic):DailyReportTopic['links'] {
  return [...new Map([topic,...topic.relatedDevelopments??[]].flatMap(stage=>stage.links).map(link=>[link.url,link])).values()];
 }

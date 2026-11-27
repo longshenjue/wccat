@@ -6,7 +6,7 @@ import {recommendTopic,eligibleColumns} from './topic-sharing/recommendation';
 import {columnForLanguage} from './topic-sharing/columns';
 import type {TopicShareSource} from './topic-sharing/types';
 import {shareEnOverviewAltText} from './shareen-overview';
-import {relatedDevelopmentText,dailyStoryLinks,dailyStoryEvidence} from './daily-story-selection';
+import {relatedDevelopmentText,dailyStoryLinks,supportsDailyStoryHighlight} from './daily-story-selection';
 
 type Fields=Record<string,unknown>;
 export type ShareEnDraftState={layout?:'editorial';reportingPolicy?:'current-news-v1';topics:Record<string,Fields>;highlightIds:unknown;posts:unknown;selectedPostId:unknown;top3:unknown};
@@ -26,7 +26,7 @@ export function shareEnEditorialSource(report:WccatDailyReport,topicId:string):T
 }
 /** A ranking headline alone cannot support an explanatory story card. */
 export function shareEnSupportedTopicIds(report:WccatDailyReport,currentReporting=false):string[] {
- return originalTopics(report).filter(topic=>dailyStoryEvidence(topic).length>0&&(!currentReporting||topic.research?.documents.some(doc=>doc.purpose==='event'))).map(topic=>topic.id);
+ return originalTopics(report).filter(topic=>supportsDailyStoryHighlight(topic,currentReporting)).map(topic=>topic.id);
 }
 export function validShareEnHighlightIds(ids:unknown,report:WccatDailyReport,editorial=false,policy?:ShareEnCopy['reportingPolicy']):ids is string[] {
  const allowed=editorial?shareEnSupportedTopicIds(report,policy==='current-news-v1'):originalTopics(report).map(t=>t.id);
