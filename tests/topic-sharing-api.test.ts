@@ -5,8 +5,9 @@ import {report,testDatabase} from './helpers/data-fixtures';
 import {topicShareCopy} from './helpers/topic-sharing-fixture';
 
 test('topic sharing API authenticates reads, rejects cross-origin writes and runs generation only as a queued job',async()=>{
- const ctx=await testDatabase(),oldHash=process.env.WCCAT_ADMIN_PASSWORD_HASH,oldSecret=process.env.WCCAT_ADMIN_SESSION_SECRET,oldKey=process.env.DEEPSEEK_API_KEY,oldFetch=globalThis.fetch;
+ const ctx=await testDatabase(),oldHash=process.env.WCCAT_ADMIN_PASSWORD_HASH,oldSecret=process.env.WCCAT_ADMIN_SESSION_SECRET,oldKey=process.env.DEEPSEEK_API_KEY,oldFetch=globalThis.fetch,oldResearch=process.env.WCCAT_TOPIC_RESEARCH_ENABLED;
  try{
+  process.env.WCCAT_TOPIC_RESEARCH_ENABLED='false';
   const auth=await import('../src/lib/admin-auth');process.env.WCCAT_ADMIN_PASSWORD_HASH=auth.hashAdminPassword('test-only-admin-password');process.env.WCCAT_ADMIN_SESSION_SECRET='test-only-session-secret-at-least-32-characters';process.env.DEEPSEEK_API_KEY='';
   const {GET,POST}=await import('../src/app/api/admin/topic-share/route');
   const {runJob}=await import('../src/lib/admin-jobs');
@@ -39,5 +40,5 @@ test('topic sharing API authenticates reads, rejects cross-origin writes and run
   assert.equal(savedPayload.record.copy.en.summary,generated.en.summary);assert.ok(savedPayload.record.reviewWarnings.some((item:{code:string})=>item.code==='language'));
   const savedEdit=await post({action:'save',id:source.sourceKey,expectedRevision:savedPayload.record.revision,copy:{...savedPayload.record.copy,en:{...savedPayload.record.copy.en,headline:'A saved editor change'}}});assert.equal(savedEdit.status,200);assert.equal(calls,1,'manual saves do not invoke AI');
   assert.equal(ctx.readDailyReportFromDb('2026-11-24')?.headline,'日报');
- }finally{globalThis.fetch=oldFetch;process.env.WCCAT_ADMIN_PASSWORD_HASH=oldHash;process.env.WCCAT_ADMIN_SESSION_SECRET=oldSecret;if(oldKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=oldKey;ctx.close();}
+ }finally{if(oldResearch===undefined)delete process.env.WCCAT_TOPIC_RESEARCH_ENABLED;else process.env.WCCAT_TOPIC_RESEARCH_ENABLED=oldResearch;globalThis.fetch=oldFetch;process.env.WCCAT_ADMIN_PASSWORD_HASH=oldHash;process.env.WCCAT_ADMIN_SESSION_SECRET=oldSecret;if(oldKey===undefined)delete process.env.DEEPSEEK_API_KEY;else process.env.DEEPSEEK_API_KEY=oldKey;ctx.close();}
 });

@@ -17,7 +17,7 @@ test('single-topic generation captures and freezes real comments without rewriti
    assert.equal(String(url),'https://api.deepseek.com/chat/completions');classifications++;
    return Response.json({choices:[{message:{content:JSON.stringify({classifications:[{id:'qq-news:1',side:'blue',confidence:.99,englishText:'We need more evidence before judging.'}]})}}]});
   };
-  const options={fetch:async()=>{generations++;return Response.json({choices:[{message:{content:JSON.stringify({column:'inside',en:copy.en,zh:copy.zh})}}]});}};
+  const options={research:async (original:typeof source)=>original,fetch:async()=>{generations++;return Response.json({choices:[{message:{content:JSON.stringify({column:'inside',en:copy.en,zh:copy.zh})}}]});}};
   const record=await service.generateSavedTopicShare(ref,options);
   assert.equal(record.source.commentExamples?.blue?.id,'qq-news:1');assert.equal(record.source.baseFingerprint,source.fingerprint);assert.notEqual(record.source.fingerprint,source.fingerprint);
   assert.equal(record.copy.sourceFingerprint,record.source.fingerprint);assert.equal(ctx.readDailyReportFromDb(daily.reportDate)!.topics[0].aiAnalysis!.commentExamples,undefined,'single-topic capture must not invalidate original daily/share versions');

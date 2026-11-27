@@ -98,6 +98,19 @@ test('oversized topic cards fail visibly after trying a compact readable layout'
  assert.throws(()=>fitTopicShareCard(measuredCard(150,130),'中文'),/中文.*1080/);
 });
 
+test('automatic topic canvas growth includes footer borders instead of leaving export disabled by three pixels',async()=>{
+ const {fitTopicShareCard}=await exporting(),previous=globalThis.getComputedStyle;
+ let footerRow=100;
+ const header={clientHeight:80,scrollHeight:80,offsetHeight:83,clientWidth:972,scrollWidth:972};
+ const content={clientHeight:770,scrollHeight:770,offsetHeight:770,clientWidth:972,scrollWidth:972};
+ const footer={get clientHeight(){return footerRow-3;},get offsetHeight(){return footerRow;},scrollHeight:119,clientWidth:972,scrollWidth:972};
+ const style={height:'1080px',set gridTemplateRows(value:string){footerRow=Number(value.match(/(\d+)px$/)?.[1]??100);}};
+ const card={style,dataset:{topicBaseHeight:'1080'},classList:{remove(){},add(){}},querySelectorAll(){return [header,content,footer];},querySelector(selector:string){return selector.includes('header')?header:selector.includes('content')?content:footer;},offsetHeight:1104} as unknown as HTMLElement;
+ globalThis.getComputedStyle=()=>({paddingTop:'42px',paddingBottom:'42px',rowGap:'24px'}) as CSSStyleDeclaration;
+ try{assert.equal(fitTopicShareCard(card,'EN'),true);assert.ok(footer.clientHeight>=footer.scrollHeight);}
+ finally{globalThis.getComputedStyle=previous;}
+});
+
 test('recommendations keep English and Chinese editorial reasoning in separate readable lists',async()=>{
  let component;
  try{component=await import('../src/components/topic-sharing/topic-share-recommendations');}

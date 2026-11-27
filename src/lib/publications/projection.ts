@@ -18,8 +18,8 @@ const chosen=(local:TopicShareRecord['copy']['en'])=>(local.posts.find(post=>pos
 export function topicPublication(record:TopicShareRecord):PublicationPayload {
  const {source,copy}=record;
  return {version:1,kind:source.ref.kind==='hourly'?'hourly':'topic',date:source.date,titles:{en:copy.en.headline||source.title,zh:copy.zh.headline||source.title},posts:{en:chosen(copy.en),zh:chosen(copy.zh)},cards:[{id:'story',rank:source.rank,selected:true,
-  en:{title:copy.en.headline,summary:copy.en.summary,context:copy.en.context,why:copy.en.whyItMatters},zh:{title:copy.zh.headline,summary:copy.zh.summary,context:copy.zh.context,why:copy.zh.whyItMatters},
-  links:source.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];}),comments:comments(source.commentExamples??source.analysis?.commentExamples,source.analysis?.battle)}]};
+  en:{title:copy.en.headline,summary:copy.en.summary,context:copy.en.context,why:copy.en.whyItMatters,...(copy.en.article?{article:{title:copy.en.article.title,body:copy.en.article.body}}:{})},zh:{title:copy.zh.headline,summary:copy.zh.summary,context:copy.zh.context,why:copy.zh.whyItMatters,...(copy.zh.article?{article:{title:copy.zh.article.title,body:copy.zh.article.body}}:{})},
+  links:[...source.links.flatMap(link=>{const safe=publicationLink(link);return safe?[safe]:[];}),...(source.research?.documents??[]).flatMap(doc=>{const safe=publicationLink({sourceId:'research',sourceName:doc.publisher,title:doc.title,url:doc.url});return safe?[{...safe,kind:'article' as const,researchId:doc.id}]:[];})],comments:comments(source.commentExamples??source.analysis?.commentExamples,source.analysis?.battle)}]};
 }
 
 export function dailyPublication(report:WccatDailyReport):PublicationPayload {

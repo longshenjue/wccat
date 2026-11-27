@@ -1,4 +1,4 @@
-const fields:Record<string,string>={headline:'卡片标题',hook:'开头切入',summary:'发生了什么',context:'理解背景',whyItMatters:'为什么值得关注',question:'讨论问题',altText:'图片替代文字',selectedPostId:'配文选择',posts:'配文候选数量',replies:'补充回复数量'};
+const fields:Record<string,string>={headline:'卡片标题',hook:'开头切入',summary:'新闻简述',context:'补充背景',whyItMatters:'WcCAT点评',question:'旧版提问',article:'配套文章',altText:'图片替代文字',selectedPostId:'配文选择',posts:'配文候选数量',replies:'补充回复数量'};
 export function topicShareReviewLabel(path:string):string {
  if(path==='column')return '栏目';
  if(path.startsWith('source.'))return '来源评论译文';
@@ -10,6 +10,7 @@ export function topicShareReviewLabel(path:string):string {
  return `${language} · ${fields[path.split('.')[1]]??'内容'}`;
 }
 export const TOPIC_REVIEW_MESSAGES:Record<string,string>={
+ editorial_style:'正文含材料诊断或热榜搬运式表述，建议改为具体新闻信息；内容已保留，由你判断。',
  missing_text:'这里暂时没有文字，可由你补充。',length:'文字超过建议长度，请按实际阅读效果判断。',language:'语言或专有名词可能需要核对，原文已保留。',
  numerical:'数字、日期或单位未能自动对应保存材料，请自行核对。',comment_evidence:'自动检查未匹配到可用评论材料，请核对相关表述。',
  quotation:'引号中的译文或转述可能需要核对，系统不判定其是否正确。',population:'涉及整体人群或普遍态度，请自行核对表述范围。',

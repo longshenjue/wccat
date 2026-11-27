@@ -28,6 +28,6 @@ export function persistTopicShare(source:TopicShareSource,value:unknown,expected
 export function saveTopicShareEdits(id:string,copy:TopicShareCopy,expectedRevision:string):TopicShareRecord {
  const db=database(),generation=readGeneration(db),record=readTopicShare(id);if(!record)throw new TopicSharingError('分享稿不存在。',404);
  if(typeof expectedRevision!=='string'||!/^[a-f0-9]{64}$/.test(expectedRevision))throw new TopicSharingError('请载入分享版本后保存。');
- const preserved={...copy,version:record.copy.version,generatedAt:record.copy.generatedAt,model:record.copy.model,sourceFingerprint:record.copy.sourceFingerprint};
+ const preserved={...copy,version:record.copy.version,generatedAt:record.copy.generatedAt,model:record.copy.model,sourceFingerprint:record.copy.sourceFingerprint,editorialPolicy:record.copy.editorialPolicy};
  return persistTopicShare(record.source,preserved,expectedRevision,generation);
 }

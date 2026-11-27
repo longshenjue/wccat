@@ -6,7 +6,7 @@ import {TOPIC_REVIEW_MESSAGES} from './review-labels';
 import {TOPIC_SHARE_CONTRACT,TOPIC_SHARE_POST_PATTERNS,topicShareFieldLimit} from './contract';
 export {TOPIC_SHARE_POST_PATTERNS} from './contract';
 
-export type TopicShareCopyIssue={path:string;code:'missing_text'|'length'|'language'|'duplicate_text'|'pattern'|'selection'|'population'|'quotation'|'candidate_count'|'reply_count'|'column_evidence'|'link'|'review_unavailable'|'comment_translation';message:string};
+export type TopicShareCopyIssue={path:string;code:'missing_text'|'length'|'language'|'duplicate_text'|'pattern'|'selection'|'population'|'quotation'|'candidate_count'|'reply_count'|'column_evidence'|'link'|'review_unavailable'|'comment_translation'|'editorial_style';message:string};
 export type TopicShareRepairIssue=TopicShareCopyIssue|(TopicShareNumericIssue&{code:'numerical'})|(TopicShareCommentIssue&{code:'comment_evidence'});
 export class TopicShareCopyError extends Error {
  constructor(readonly issues:TopicShareRepairIssue[]){
@@ -36,10 +36,14 @@ function text(value:unknown,path:string,max:number,language?:TopicShareLanguage,
  if(language==='zh'&&!/\p{Script=Han}/u.test(clean))report('language','Missing independently localized Chinese');
  return clean;
 }
-function localized(value:unknown,language:TopicShareLanguage,issues:TopicShareCopyIssue[]):LocalizedTopicShare {
+function localized(value:unknown,language:TopicShareLanguage,issues:TopicShareCopyIssue[],newsStyle=false):LocalizedTopicShare {
  const data=object(value??{},language);
  const checked=(value:unknown,path:string)=>{const limit=topicShareFieldLimit(path);return text(value,path,limit.maxChars,limit.language,limit.maxWords,issues);};
- fields(data,['headline','hook','summary','context','whyItMatters','question','posts','selectedPostId','replies','altText'],language);
+ fields(data,['headline','hook','summary','context','whyItMatters','question','posts','selectedPostId','replies','altText','article'],language);
+ const optional=(field:string)=>newsStyle&&(data[field]===undefined||data[field]===null||typeof data[field]==='string'&&!data[field].trim())?'':checked(data[field],language+'.'+field);
+ let article:LocalizedTopicShare['article'];
+ if(data.article!==undefined){const row=object(data.article,language+'.article');fields(row,['title','body'],language+'.article');article={title:checked(row.title,language+'.article.title'),body:checked(row.body,language+'.article.body')};}
+ else if(newsStyle)issues.push({path:language+'.article',code:'missing_text',message:'Companion article is missing; the cover draft is preserved'});
  if(data.posts===undefined||Array.isArray(data.posts)&&!data.posts.length)data.posts=[{id:`draft-${language}`,pattern:'context',text:'',reason:''}];
  if(!Array.isArray(data.posts))throw new Error(`Invalid post candidates: ${language}.posts`);
  if(data.posts.length!==TOPIC_SHARE_CONTRACT.postCount)issues.push({path:language+'.posts',code:'candidate_count',message:'Expected three post candidates'});
@@ -61,15 +65,15 @@ function localized(value:unknown,language:TopicShareLanguage,issues:TopicShareCo
  if(!Array.isArray(data.replies))throw new Error(`Invalid replies: ${language}.replies`);
  if(data.replies.length>TOPIC_SHARE_CONTRACT.maxReplies)issues.push({path:language+'.replies',code:'reply_count',message:'Reply count exceeds suggested limit'});
  return {
-  headline:checked(data.headline,language+'.headline'),hook:checked(data.hook,language+'.hook'),
-  summary:checked(data.summary,language+'.summary'),context:checked(data.context,language+'.context'),
-  whyItMatters:checked(data.whyItMatters,language+'.whyItMatters'),question:checked(data.question,language+'.question'),
+  headline:checked(data.headline,language+'.headline'),hook:optional('hook'),
+  summary:checked(data.summary,language+'.summary'),context:optional('context'),
+  whyItMatters:checked(data.whyItMatters,language+'.whyItMatters'),question:optional('question'),
   posts,selectedPostId,replies:data.replies.map((reply,index)=>checked(reply,`${language}.replies[${index}]`)),
-  altText:checked(data.altText,language+'.altText')
+  altText:checked(data.altText,language+'.altText'),...(article?{article}:{})
  };
 }
 function visibleTexts(copy:LocalizedTopicShare,language:TopicShareLanguage):Array<{path:string;body:string}>{
- return [...(['headline','hook','summary','context','whyItMatters','question','altText'] as const).map(field=>({path:`${language}.${field}`,body:copy[field]})),...copy.posts.map((post,index)=>({path:`${language}.posts[${index}].text`,body:post.text})),...copy.replies.map((body,index)=>({path:`${language}.replies[${index}]`,body}))];
+ return [...(['headline','hook','summary','context','whyItMatters','question','altText'] as const).map(field=>({path:`${language}.${field}`,body:copy[field]})),...(copy.article?[{path:`${language}.article.title`,body:copy.article.title},{path:`${language}.article.body`,body:copy.article.body}]:[]),...copy.posts.map((post,index)=>({path:`${language}.posts[${index}].text`,body:post.text})),...copy.replies.map((body,index)=>({path:`${language}.replies[${index}]`,body}))];
 }
 function missingFacts<T>(source:T[],target:T[],key:(value:T)=>string=String):T[] {
  const allowed=new Set(source.map(key));return [...new Map(target.filter(value=>!allowed.has(key(value))).map(value=>[key(value),value])).values()];
@@ -107,7 +111,7 @@ function unsupportedNumbers(source:NumericalFacts,target:NumericalFacts):Numeric
  return result.numbers.length||result.ratios.length||result.seasons.length||result.dates.length||Object.keys(roles).length?result:undefined;
 }
 function sourceFacts(source:TopicShareSource):string {
- return [source.title,source.summary,source.detail,source.context,source.analysis?.summary,source.analysis?.detailedContent,source.analysis?.outsiderContext,...source.links.map(link=>link.title),...(['en','zh'] as const).flatMap(language=>usableTopicQuotes(source,language).map(item=>item.text))].filter(Boolean).join('\n');
+ return [source.title,source.summary,source.detail,source.context,source.analysis?.summary,source.analysis?.detailedContent,source.analysis?.outsiderContext,...source.links.map(link=>link.title),...(source.research?.documents??[]).flatMap(doc=>[doc.title,doc.text]),...(['en','zh'] as const).flatMap(language=>usableTopicQuotes(source,language).map(item=>item.text))].filter(Boolean).join('\n');
 }
 const withoutUrls=(text:string)=>text.replace(/https?:\/\/[^\s<>"“”]+/giu,'');
 /** Parse quantity compounds as quantities, preserving unrelated names such as Three-Body. */
@@ -158,7 +162,8 @@ function unsupportedCommentClaim(body:string):boolean {
 /** Structural/provenance failures are errors; editorial rules collect observations. */
 function assessTopicShareCopy(value:unknown,source:TopicShareSource):{copy:TopicShareCopy;issues:TopicShareRepairIssue[]} {
  const data=object(value,'TopicShare');
- fields(data,['version','generatedAt','model','sourceFingerprint','column','en','zh'],'TopicShare');
+ fields(data,['version','generatedAt','model','sourceFingerprint','column','en','zh','editorialPolicy'],'TopicShare');
+ if(data.editorialPolicy!==undefined&&data.editorialPolicy!=='news-commentary-v1')throw new Error('Unknown editorial policy');
  if(data.version!==1)throw new Error('Unsupported topic share version');
  if(typeof data.sourceFingerprint!=='string'||data.sourceFingerprint!==source.fingerprint||!/^[a-f0-9]{64}$/.test(data.sourceFingerprint))throw new Error('Topic share source fingerprint changed');
  const generatedAt=text(data.generatedAt,'generatedAt',40),model=text(data.model,'model',200);
@@ -166,12 +171,12 @@ function assessTopicShareCopy(value:unknown,source:TopicShareSource):{copy:Topic
  if(!EDITORIAL_COLUMNS.some(column=>column.id===data.column))throw new Error('Unknown editorial column');
  const copyIssues:TopicShareCopyIssue[]=[];
  if(!eligibleColumns(source).includes(data.column as EditorialColumn))copyIssues.push({path:'column',code:'column_evidence',message:'Editorial column lacks matching source evidence'});
- const column=data.column as EditorialColumn,en=localized(data.en,'en',copyIssues),zh=localized(data.zh,'zh',copyIssues);
+ const column=data.column as EditorialColumn,en=localized(data.en,'en',copyIssues,!!data.editorialPolicy),zh=localized(data.zh,'zh',copyIssues,!!data.editorialPolicy);
  const facts=sourceFacts(source);
  let allowedFacts:NumericalFacts;
  try{allowedFacts=copyNumericalFacts(facts);}
  catch{allowedFacts={numbers:[],ratios:[],seasons:[],dates:[],roles:{}};copyIssues.push({path:'source.numbers',code:'review_unavailable',message:'Source numerical analysis unavailable'});}
- const allowedLinks=new Set(source.links.map(link=>link.url));
+ const allowedLinks=new Set([...source.links.map(link=>link.url),...(source.research?.documents??[]).map(doc=>doc.url)]);
  const numericalIssues:TopicShareNumericIssue[]=[];
  const commentIssues:TopicShareCommentIssue[]=[];
  for(const language of ['en','zh'] as const){
@@ -181,6 +186,7 @@ function assessTopicShareCopy(value:unknown,source:TopicShareSource):{copy:Topic
    if(post.pattern==='number_context'&&!allowedFacts.numbers.length&&!allowedFacts.ratios.length)copyIssues.push({path:`${language}.posts[${index}].pattern`,code:'pattern',message:'Number pattern requires source numerical evidence'});
   }
   for(const {path,body} of visibleTexts(localizedCopy,language)){
+   if(data.editorialPolicy&&/保存的(?:材料|报道|描述)|原材料(?:中|里)|本次(?:检索|查询)|(?:材料|原文)(?:中)?没有(?:说明|提供|提到)|登上.{0,12}热搜第|\b(?:saved (?:material|report|source)|the supplied material|source material does not|(?:our|this) (?:search|retrieval) (?:found|did not))\b/i.test(body))copyIssues.push({path,code:'editorial_style',message:'Public text contains internal evidence diagnostics or hot-list filler'});
    for(const match of body.matchAll(/https?:\/\/[^\s<>"“”]+/giu)){
     const url=match[0].replace(/[.,;!?，。；！？)）]+$/u,'');
     if(!allowedLinks.has(url))copyIssues.push({path,code:'link',message:'Unapproved source URL in generated copy'});
@@ -196,7 +202,7 @@ function assessTopicShareCopy(value:unknown,source:TopicShareSource):{copy:Topic
  }
  if(usableTopicQuotes(source,'zh').length>usableTopicQuotes(source,'en').length)copyIssues.push({path:'source.commentTranslation',code:'comment_translation',message:'Some source comments lack a usable English translation'});
  if(usableTopicQuotes(source,'en').some(item=>/\p{Script=Han}/u.test(item.text)))copyIssues.push({path:'source.commentTranslation',code:'language',message:'Stored English comment translation contains Chinese; preserved for administrator review'});
- return {copy:{version:1,generatedAt,model,sourceFingerprint:data.sourceFingerprint,column,en,zh},issues:[...copyIssues,
+ return {copy:{version:1,generatedAt,model,sourceFingerprint:data.sourceFingerprint,column,en,zh,...(data.editorialPolicy?{editorialPolicy:'news-commentary-v1' as const}:{})},issues:[...copyIssues,
   ...numericalIssues.map(issue=>({...issue,code:'numerical' as const})),...commentIssues.map(issue=>({...issue,code:'comment_evidence' as const}))]};
 }
 

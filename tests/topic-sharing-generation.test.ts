@@ -32,7 +32,7 @@ test('DeepSeek generation is bounded, source-grounded and returns server-owned m
    const result=await generateTopicShare(value,{now:()=>Date.parse('2026-11-24T02:00:00.000Z'),fetch:async(url,options)=>{
     calls++;assert.equal(url,'https://api.deepseek.com/chat/completions');assert.equal(options?.method,'POST');
     assert.ok(options?.signal instanceof AbortSignal);assert.equal(options.signal.aborted,false);
-    const request=JSON.parse(String(options?.body));assert.equal(request.model,'deepseek-topic-test');assert.equal(request.max_tokens,6000);
+    const request=JSON.parse(String(options?.body));assert.equal(request.model,'deepseek-topic-test');assert.equal(request.max_tokens,9000);
     assert.equal(request.messages[0].role,'system');assert.equal(request.messages[1].role,'user');
     const untrusted=JSON.parse(request.messages[1].content);assert.equal(untrusted.source.title,value.title);
     return response(content());

@@ -5,6 +5,7 @@ import type {TopicGroup,RawHotItem} from '../types';
 import type {TopicAnalysis} from '../topic-analysis';
 import type {TopicShareRef,TopicShareSource,TopicShareLink} from './types';
 import {relatedDevelopmentText,dailyStoryLinks} from '../daily-story-selection';
+import type {TopicResearch} from './research/types';
 
 export class TopicSharingError extends Error {constructor(message:string,readonly status=400){super(message);}}
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
@@ -51,6 +52,10 @@ function finalize(value:Omit<TopicShareSource,'fingerprint'|'sourceKey'>):TopicS
 export function withTopicShareComments(source:TopicShareSource,analysis:TopicAnalysis):TopicShareSource {
  const {fingerprint,sourceKey:_,...material}=source;
  return finalize({...material,baseFingerprint:source.baseFingerprint??fingerprint,analysis,commentExamples:analysis.commentExamples});
+}
+export function withTopicShareResearch(source:TopicShareSource,research:TopicResearch):TopicShareSource {
+ const {fingerprint,sourceKey:_,...material}=source;
+ return finalize({...material,baseFingerprint:source.baseFingerprint??fingerprint,research});
 }
 export function loadTopicShareSource(value:unknown):TopicShareSource {
  const ref=parseTopicShareRef(value);

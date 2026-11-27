@@ -1,5 +1,6 @@
 import type {TopicAnalysis} from '../topic-analysis';
 import type {CommentExamples} from '../comments/types';
+import type {TopicResearch} from './research/types';
 
 export type TopicShareRef =
  | {kind:'hourly';snapshot:string;version:string;key:string}
@@ -12,6 +13,7 @@ export type TopicShareSource={
  topicId:string;title:string;summary:string;detail:string;context:string;
  categories:string[];rank:number;signal:string;links:TopicShareLink[];
  analysis?:TopicAnalysis;commentExamples?:CommentExamples;cover?:string;
+ research?:TopicResearch;
  /** Identity of the saved source before generation-time comment enrichment. Server-owned. */
  baseFingerprint?:string;
 };
@@ -25,10 +27,12 @@ export type TopicSharePost={id:string;pattern:string;text:string;reason:string};
 export type LocalizedTopicShare={
  headline:string;hook:string;summary:string;context:string;whyItMatters:string;
  question:string;posts:TopicSharePost[];selectedPostId:string;replies:string[];altText:string;
+ article?:{title:string;body:string};
 };
 export type TopicShareCopy={
  version:1;generatedAt:string;model:string;sourceFingerprint:string;column:EditorialColumn;
  en:LocalizedTopicShare;zh:LocalizedTopicShare;
+ editorialPolicy?:'news-commentary-v1';
 };
 export type TopicShareReviewWarning={path:string;code:string;message:string;values?:string[]};
 export type TopicShareRecord={id:string;revision:string;source:TopicShareSource;copy:TopicShareCopy;reviewWarnings?:TopicShareReviewWarning[]};

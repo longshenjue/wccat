@@ -1,4 +1,4 @@
-type EvidenceSource={title:string;summary?:string;detail?:string;context?:string;analysis?:{summary?:string;detailedContent?:string;outsiderContext?:string}};
+type EvidenceSource={title:string;summary?:string;detail?:string;context?:string;analysis?:{summary?:string;detailedContent?:string;outsiderContext?:string};research?:{documents:Array<{text:string}>}};
 const compact=(value:string)=>value.normalize('NFKC').replace(/\s+/gu,'');
 const escape=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/gu,'\\$&');
 const localTemplates=[
@@ -12,7 +12,7 @@ const localTemplates=[
 export function topicEvidenceTexts(source:EvidenceSource):string[] {
  const title=compact(source.title),prefix=escape(title);
  const templates=[new RegExp(prefix+'正在[^。]*?等来源获得注意力[。.]?','gu'),new RegExp(prefix+'是过去24小时的高频中文互联网话题[。.]?','gu'),/这个话题来自[^。]*?可先从原始链接理解中文用户的表达方式、梗和争议点[。.]?/gu];
- const values=[source.summary,source.detail,source.context,source.analysis?.summary,source.analysis?.detailedContent,source.analysis?.outsiderContext];
+ const values=[source.summary,source.detail,source.context,source.analysis?.summary,source.analysis?.detailedContent,source.analysis?.outsiderContext,...(source.research?.documents??[]).map(doc=>doc.text)];
  return [...new Set(values.filter((value):value is string=>{
   if(typeof value!=='string'||!value.trim())return false;
   let rest=compact(value);for(const template of localTemplates)rest=rest.replaceAll(template,'');
